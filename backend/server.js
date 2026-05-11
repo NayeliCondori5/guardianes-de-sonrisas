@@ -14,7 +14,7 @@ app.use(express.json());
 
 // Directorio de subidas
 const uploadsDir = process.env.UPLOADS_DIR || './uploads';
-if (!fs.existsSync(uploadsDir)){
+if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir);
 }
 app.use('/uploads', express.static(uploadsDir));
