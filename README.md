@@ -51,7 +51,7 @@ cd backend && npm run dev
 cd frontend && npm start
 ```
 ## 📁 Estructura del proyecto
-
+```bash
 guardianes-de-sonrisas/
 ├── backend/                 # API REST (Node.js + Express)
 │   ├── src/
@@ -74,7 +74,7 @@ guardianes-de-sonrisas/
 │
 ├── docs/                    # Documentación técnica
 └── .env.example
-
+```
 ## 📦 Scripts disponibles
 
 Backend
