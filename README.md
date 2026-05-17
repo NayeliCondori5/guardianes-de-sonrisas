@@ -49,8 +49,8 @@ cd backend && npm run dev
 
 # Terminal 2 (frontend):
 cd frontend && npm start
-
-📁 Estructura del proyecto
+```
+## 📁 Estructura del proyecto
 
 guardianes-de-sonrisas/
 ├── backend/                 # API REST (Node.js + Express)
@@ -75,15 +75,17 @@ guardianes-de-sonrisas/
 ├── docs/                    # Documentación técnica
 └── .env.example
 
-📦 Scripts disponibles
+## 📦 Scripts disponibles
 
 Backend
+```bash
 npm run dev      # Modo desarrollo con nodemon
 npm start        # Modo producción
 npm run seed     # Poblar base de datos
 npm run migrate  # Ejecutar migraciones
-
+```
 Frontend
+```bash
 npm start        # Modo desarrollo (puerto 3000)
 npm run build    # Build para producción
 npm test         # Ejecutar tests
