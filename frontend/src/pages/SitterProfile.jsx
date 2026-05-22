@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import GlassCard from '../components/common/GlassCard';
 import { useAuth } from '../context/AuthContext';
-import { MapPin, Star, ShieldCheck, Heart, Car, Home, Cigarette, BookOpen } from 'lucide-react';
+import { MapPin, Star, ShieldCheck, Heart, Car, Home, Cigarette, BookOpen, Briefcase, X } from 'lucide-react';
 import CustomModal from '../components/common/CustomModal';
 
 const SitterProfile = () => {
@@ -12,12 +12,25 @@ const SitterProfile = () => {
     const { user } = useAuth();
     const [sitter, setSitter] = useState(null);
     const [modal, setModal] = useState({ isOpen: false, title: '', message: '', type: 'success' });
+    const [sitterServices, setSitterServices] = useState([]);
+    const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+    const [bookingForm, setBookingForm] = useState({
+        date: '',
+        hours: 4,
+        selectedServiceId: 'default'
+    });
 
     useEffect(() => {
         const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
         const found = allUsers.find(s => s.id.toString() === id || s.id === id);
         // Default detailed data if missing
         if (found) {
+            const allReviews = JSON.parse(localStorage.getItem('reviews') || '[]');
+            const sitterReviews = allReviews.filter(r => r.sitterId?.toString() === found.id?.toString());
+            const avgRating = sitterReviews.length > 0
+                ? (sitterReviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / sitterReviews.length).toFixed(1)
+                : (found.rating || 5.0).toFixed(1);
+
             setSitter({
                 ...found,
                 name: found.full_name,
@@ -25,6 +38,7 @@ const SitterProfile = () => {
                 city: found.city || 'Ciudad no especificada',
                 rate: found.rate || 15,
                 age: found.age || 25,
+                rating: parseFloat(avgRating),
                 description: found.description || 'Cuidador apasionado y responsable.',
                 superpowers: found.superpowers || ['Manualidades', 'Leer a niños', 'Música', 'Juegos creativos'],
                 comfortableWith: found.comfortableWith || ['Mascotas', 'Ayuda con tarea', 'Cocinar'],
@@ -45,6 +59,11 @@ const SitterProfile = () => {
                     DOM: { manana: false, mediodia: false, tarde: false, noche: false },
                 }
             });
+
+            // Fetch approved services for this sitter
+            const allServices = JSON.parse(localStorage.getItem('services') || '[]');
+            const approved = allServices.filter(s => (s.sitter_id?.toString() === found.id?.toString()) && s.status === 'approved');
+            setSitterServices(approved);
         }
     }, [id]);
 
@@ -68,13 +87,29 @@ const SitterProfile = () => {
             return;
         }
 
+        // Prepopulate tomorrow's date
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        setBookingForm({
+            date: tomorrow.toISOString().split('T')[0],
+            hours: 4,
+            selectedServiceId: 'default'
+        });
+        setIsBookingModalOpen(true);
+    };
+
+    const submitBookingRequest = () => {
         const requests = JSON.parse(localStorage.getItem('booking_requests') || '[]');
         
-        // Simple mock of time selection (normally would be a form)
-        const selectedDate = new Date();
-        selectedDate.setDate(selectedDate.getDate() + 2); // 2 days from now
-        const hours = 4;
-        
+        const isDefault = bookingForm.selectedServiceId === 'default';
+        const activeService = isDefault 
+            ? null 
+            : sitterServices.find(s => s.id === bookingForm.selectedServiceId);
+            
+        const appliedRate = activeService ? activeService.rate : sitter.rate;
+        const total = appliedRate * bookingForm.hours;
+
         const newRequest = {
             id: Date.now(),
             parentId: user.id?.toString() || 'parent1',
@@ -82,17 +117,21 @@ const SitterProfile = () => {
             sitterId: sitter.id,
             sitterName: sitter.name,
             status: 'PENDIENTE',
-            date: selectedDate.toLocaleDateString(),
-            hours: hours,
-            total: sitter.rate * hours
+            date: bookingForm.date,
+            hours: bookingForm.hours,
+            total: total,
+            serviceTitle: activeService ? activeService.title : 'Cuidado General',
+            serviceCategory: activeService ? activeService.category : 'Cuidado General / Juegos'
         };
+        
         requests.push(newRequest);
         localStorage.setItem('booking_requests', JSON.stringify(requests));
         
+        setIsBookingModalOpen(false);
         setModal({
             isOpen: true,
             title: "¡Solicitud Enviada!",
-            message: `Has solicitado a ${sitter.name}. El cuidador recibirá una notificación en su panel.`,
+            message: `Has solicitado a ${sitter.name} para el servicio "${newRequest.serviceTitle}". El cuidador recibirá una notificación en su panel.`,
             type: 'success'
         });
     };
@@ -124,9 +163,13 @@ const SitterProfile = () => {
                         <p className="text-on-surface-variant flex items-center justify-center gap-1 mt-2 font-medium">
                             <MapPin size={18}/> {sitter.city}
                         </p>
+                        <div className="flex justify-center items-center text-secondary mt-2">
+                            <Star size={18} style={{fill: 'currentColor'}}/>
+                            <span className="text-dark font-bold ml-1 text-base">{sitter.rating}</span>
+                        </div>
                         <div className="flex justify-center items-center gap-4 mt-4">
                             <div className="text-center">
-                                <p className="text-2xl font-bold text-primary">${sitter.rate}</p>
+                                <p className="text-2xl font-bold text-primary">Bs. {sitter.rate}</p>
                                 <p className="text-xs text-on-surface-variant uppercase tracking-wider">Por hora</p>
                             </div>
                             <div className="w-px h-8 bg-outline-variant/30"></div>
@@ -158,6 +201,60 @@ const SitterProfile = () => {
                     <GlassCard className="rounded-[32px] p-8">
                         <h2 className="font-display-lg text-2xl font-bold text-primary mb-4">Descripción</h2>
                         <p className="text-on-surface-variant leading-relaxed text-lg">{sitter.description}</p>
+                    </GlassCard>
+
+                    {/* Servicios Especializados */}
+                    <GlassCard className="rounded-[32px] p-8 shadow-xl">
+                        <h2 className="font-display-lg text-2xl font-bold text-primary mb-6 flex items-center gap-2">
+                            <Briefcase className="text-primary" /> Servicios Especializados de {sitter.name}
+                        </h2>
+                        
+                        {sitterServices.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {sitterServices.map((service) => (
+                                    <div 
+                                        key={service.id} 
+                                        className="p-5 rounded-2xl bg-surface-container border border-outline-variant/30 hover:border-primary/50 transition flex flex-col justify-between"
+                                    >
+                                        <div>
+                                            <span className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-bold mb-2 inline-block">
+                                                {service.category}
+                                            </span>
+                                            <h3 className="font-bold text-lg text-dark mb-1">{service.title}</h3>
+                                            <p className="text-on-surface-variant text-sm mb-4 leading-relaxed line-clamp-3">
+                                                {service.description}
+                                            </p>
+                                        </div>
+                                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-outline-variant/10">
+                                            <div className="font-bold text-primary text-base">
+                                                Bs. {service.rate} <span className="text-xs text-on-surface-variant font-normal">/ hr</span>
+                                            </div>
+                                            <button 
+                                                onClick={() => {
+                                                    if (!user) {
+                                                        handleRequest();
+                                                        return;
+                                                    }
+                                                    setBookingForm({
+                                                        date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+                                                        hours: 4,
+                                                        selectedServiceId: service.id
+                                                    });
+                                                    setIsBookingModalOpen(true);
+                                                }}
+                                                className="px-3 py-1.5 bg-primary text-white rounded-full text-xs font-bold hover:bg-primary-container transition active:scale-95 shadow-sm"
+                                            >
+                                                Reservar
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-6">
+                                <p className="text-on-surface-variant text-sm font-medium">Esta niñera ofrece cuidado general por el momento.</p>
+                            </div>
+                        )}
                     </GlassCard>
 
                     <GlassCard className="rounded-[32px] p-8">
@@ -208,15 +305,148 @@ const SitterProfile = () => {
                         </GlassCard>
                     </div>
 
-                    <GlassCard className="rounded-[32px] p-6">
-                        <h3 className="font-display-lg text-xl font-bold mb-4">Ubicación</h3>
-                        <div className="w-full h-64 bg-surface-dim rounded-2xl flex items-center justify-center border border-outline-variant/30">
-                            <p className="text-on-surface-variant font-bold flex items-center gap-2"><MapPin/> Mapa de Google simulado para {sitter.city}</p>
+                    <GlassCard className="rounded-[32px] p-8 shadow-xl">
+                        <h2 className="font-display-lg text-2xl font-bold mb-4 flex items-center gap-2">
+                            <MapPin className="text-primary" /> Ubicación de Trabajo
+                        </h2>
+
+                        <div className="flex items-center gap-3 p-4 bg-primary/10 rounded-2xl mb-6 border border-primary/20 shadow-sm">
+                            <MapPin className="text-primary shrink-0" size={24} />
+                            <div>
+                                <p className="text-xs font-bold uppercase tracking-wider text-primary">Zona de Cobertura Confirmada</p>
+                                <p className="text-on-surface font-semibold text-sm">{sitter.city || 'No especificada'}</p>
+                            </div>
+                        </div>
+
+                        <div className="w-full h-64 rounded-2xl overflow-hidden border border-outline-variant/30 shadow-inner">
+                            <iframe 
+                                title="Mapa de ubicación niñera"
+                                width="100%" 
+                                height="100%" 
+                                style={{ border: 0 }}
+                                loading="lazy"
+                                allowFullScreen
+                                src={`https://maps.google.com/maps?q=${encodeURIComponent(sitter.city || 'La Paz, Bolivia')}&t=&z=15&ie=UTF8&output=embed`}
+                            ></iframe>
                         </div>
                     </GlassCard>
                 </div>
             </div>
             
+            {isBookingModalOpen && (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
+                    <GlassCard className="w-full max-w-md rounded-[32px] p-8 shadow-2xl relative animate-in zoom-in duration-300">
+                        <button 
+                            onClick={() => setIsBookingModalOpen(false)}
+                            className="absolute top-6 right-6 p-2 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-highest transition"
+                        >
+                            <X size={18} />
+                        </button>
+                        
+                        <h2 className="font-display-lg text-2xl font-bold mb-2 text-dark flex items-center gap-2">
+                            <Briefcase className="text-primary" /> Solicitar a {sitter.name}
+                        </h2>
+                        <p className="text-on-surface-variant text-sm mb-6 leading-relaxed">
+                            Personaliza los detalles de la solicitud. Si eliges un servicio especializado, se aplicará su tarifa correspondiente.
+                        </p>
+
+                        <div className="space-y-4">
+                            {/* Selector de Servicio */}
+                            <div>
+                                <label className="block text-xs font-bold text-primary uppercase tracking-wider mb-2">
+                                    Servicio a Contratar
+                                </label>
+                                <select 
+                                    value={bookingForm.selectedServiceId}
+                                    onChange={(e) => setBookingForm({ ...bookingForm, selectedServiceId: e.target.value })}
+                                    className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
+                                >
+                                    <option value="default">Cuidado General (Bs. {sitter.rate}/hora)</option>
+                                    {sitterServices.map(s => (
+                                        <option key={s.id} value={s.id}>
+                                            {s.title} (Bs. {s.rate}/hora)
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Fecha */}
+                            <div>
+                                <label className="block text-xs font-bold text-primary uppercase tracking-wider mb-2">
+                                    Fecha del Servicio
+                                </label>
+                                <input 
+                                    type="date"
+                                    value={bookingForm.date}
+                                    onChange={(e) => setBookingForm({ ...bookingForm, date: e.target.value })}
+                                    className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
+                                />
+                            </div>
+
+                            {/* Horas */}
+                            <div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-xs font-bold text-primary uppercase tracking-wider">
+                                        Duración (Horas)
+                                    </label>
+                                    <span className="text-sm font-bold text-primary">{bookingForm.hours} horas</span>
+                                </div>
+                                <input 
+                                    type="range"
+                                    min="1"
+                                    max="24"
+                                    value={bookingForm.hours}
+                                    onChange={(e) => setBookingForm({ ...bookingForm, hours: parseInt(e.target.value) })}
+                                    className="w-full accent-primary h-2 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer"
+                                />
+                            </div>
+
+                            {/* Detalle de Precios */}
+                            <div className="p-4 bg-primary/10 rounded-2xl border border-primary/20 shadow-sm mt-4">
+                                <div className="flex justify-between items-center text-sm font-bold text-on-surface mb-1">
+                                    <span>Tarifa por hora:</span>
+                                    <span className="text-primary">
+                                        Bs. {bookingForm.selectedServiceId === 'default' 
+                                            ? sitter.rate 
+                                            : sitterServices.find(s => s.id === bookingForm.selectedServiceId)?.rate || sitter.rate
+                                        }
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm font-bold text-on-surface mb-2">
+                                    <span>Horas contratadas:</span>
+                                    <span>{bookingForm.hours} horas</span>
+                                </div>
+                                <div className="w-full h-px bg-outline-variant/20 my-2"></div>
+                                <div className="flex justify-between items-center text-lg font-bold text-dark">
+                                    <span>Total Estimado:</span>
+                                    <span className="text-primary text-xl">
+                                        Bs. {(bookingForm.selectedServiceId === 'default' 
+                                            ? sitter.rate 
+                                            : sitterServices.find(s => s.id === bookingForm.selectedServiceId)?.rate || sitter.rate
+                                        ) * bookingForm.hours}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4 mt-8">
+                            <button 
+                                onClick={() => setIsBookingModalOpen(false)}
+                                className="flex-1 bg-surface-container text-on-surface-variant py-3 rounded-full font-bold hover:bg-surface-container-highest transition active:scale-95"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                onClick={submitBookingRequest}
+                                className="flex-1 bg-primary text-white py-3 rounded-full font-bold shadow-lg hover:bg-primary-container transition active:scale-95"
+                            >
+                                Enviar Solicitud
+                            </button>
+                        </div>
+                    </GlassCard>
+                </div>
+            )}
+
             <CustomModal 
                 isOpen={modal.isOpen}
                 onClose={() => {

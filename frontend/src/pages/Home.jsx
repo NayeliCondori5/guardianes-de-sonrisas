@@ -1,8 +1,66 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../components/common/Navbar';
 import { Link } from 'react-router-dom';
+import { Star, ChevronLeft, ChevronRight, Quote } from 'lucide-react';
 
 const Home = () => {
+    const [reviews, setReviews] = useState([]);
+    const [activeIndex, setActiveIndex] = useState(0);
+
+    const initialSeededReviews = [
+        {
+            id: 'seeded1',
+            parentName: 'María Rojas',
+            parentAvatar: null,
+            serviceTitle: 'Estimulación de Psicomotricidad',
+            rating: 5,
+            comment: '¡Excelente servicio! Nayeli cuidó a mi pequeño con mucha paciencia y cariño. Super profesional y recomendada.',
+            date: '15/5/2026',
+            city: 'La Paz'
+        },
+        {
+            id: 'seeded2',
+            parentName: 'Carlos Delgado',
+            parentAvatar: null,
+            serviceTitle: 'Acompañamiento Adulto Mayor',
+            rating: 5,
+            comment: 'Muy puntual y profesional. Mi abuelita estuvo muy bien atendida y contenta en todo momento. Gran vocación de servicio.',
+            date: '10/5/2026',
+            city: 'Santa Cruz'
+        },
+        {
+            id: 'seeded3',
+            parentName: 'Sofía Mendoza',
+            parentAvatar: null,
+            serviceTitle: 'Apoyo en Necesidades Especiales',
+            rating: 5,
+            comment: 'Gran carisma y responsabilidad. Nos ayudó muchísimo con nuestro niño. Sabe perfectamente cómo ganarse su confianza.',
+            date: '08/5/2026',
+            city: 'Cochabamba'
+        }
+    ];
+
+    useEffect(() => {
+        const storedReviews = JSON.parse(localStorage.getItem('reviews') || '[]');
+        setReviews([...storedReviews, ...initialSeededReviews]);
+    }, []);
+
+    useEffect(() => {
+        if (reviews.length <= 1) return;
+        const interval = setInterval(() => {
+            setActiveIndex((prevIndex) => (prevIndex + 1) % reviews.length);
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [reviews]);
+
+    const nextSlide = () => {
+        setActiveIndex((prevIndex) => (prevIndex + 1) % reviews.length);
+    };
+
+    const prevSlide = () => {
+        setActiveIndex((prevIndex) => (prevIndex - 1 + reviews.length) % reviews.length);
+    };
+
     return (
         <div className="bg-background text-on-surface font-body-md overflow-x-hidden min-h-screen">
             <Navbar />
@@ -86,6 +144,115 @@ const Home = () => {
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                {/* Reseñas Carousel Section */}
+                <section className="py-24 px-4 md:px-20 bg-background relative overflow-hidden">
+                    {/* Background decorative glowing blobs */}
+                    <div className="blob-bg absolute top-[20%] left-[10%] w-[350px] h-[350px] bg-secondary-fixed opacity-20 rounded-full blur-3xl"></div>
+                    <div className="blob-bg absolute bottom-[20%] right-[10%] w-[350px] h-[350px] bg-primary-fixed-dim opacity-20 rounded-full blur-3xl"></div>
+
+                    <div className="max-w-[900px] mx-auto relative z-10">
+                        <div className="text-center mb-16">
+                            <span className="inline-block px-4 py-1.5 bg-primary/10 text-primary rounded-full text-xs font-bold uppercase tracking-wider mb-3">Testimonios</span>
+                            <h2 className="font-display-lg text-4xl font-bold text-primary">Reseñas de Nuestras Familias</h2>
+                            <p className="font-body-md text-on-surface-variant mt-2">Descubre las opiniones reales de los padres en Guardianes de Sonrisas.</p>
+                        </div>
+
+                        {reviews.length > 0 ? (
+                            <div className="relative group">
+                                {/* Carousel Card */}
+                                <div className="glass-card rounded-[32px] p-8 md:p-12 shadow-2xl relative border border-outline-variant/20 overflow-hidden min-h-[320px] flex flex-col justify-between transition-all duration-500">
+                                    <div className="absolute top-6 right-8 text-primary/10 select-none">
+                                        <Quote size={80} className="fill-current" />
+                                    </div>
+
+                                    <div className="mb-6">
+                                        {/* Stars */}
+                                        <div className="flex gap-1 mb-6">
+                                            {Array.from({ length: 5 }).map((_, i) => (
+                                                <Star 
+                                                    key={i} 
+                                                    size={20} 
+                                                    className={i < reviews[activeIndex].rating ? 'fill-amber-400 text-amber-400' : 'text-on-surface-variant/20'} 
+                                                />
+                                            ))}
+                                        </div>
+
+                                        {/* Comment */}
+                                        <p className="font-body-lg text-lg md:text-xl text-on-surface leading-relaxed italic mb-8 font-medium">
+                                            "{reviews[activeIndex].comment}"
+                                        </p>
+                                    </div>
+
+                                    {/* Author & Service Meta */}
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-outline-variant/20 pt-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 rounded-full bg-primary-fixed-dim text-primary flex items-center justify-center font-bold text-lg border border-primary/20 overflow-hidden">
+                                                {reviews[activeIndex].parentAvatar ? (
+                                                    <img src={reviews[activeIndex].parentAvatar} alt="Profile" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    reviews[activeIndex].parentName?.charAt(0) || 'P'
+                                                )}
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-on-surface text-base">{reviews[activeIndex].parentName}</h4>
+                                                <p className="text-xs text-on-surface-variant font-semibold">
+                                                    {reviews[activeIndex].city || 'Bolivia'} • {reviews[activeIndex].date}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <span className="self-start md:self-center px-4 py-1.5 bg-secondary-fixed text-on-secondary-fixed rounded-full text-xs font-bold border border-secondary/20 shadow-sm">
+                                            {reviews[activeIndex].serviceTitle}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Manual Controls - Prev/Next Arrows */}
+                                {reviews.length > 1 && (
+                                    <>
+                                        <button 
+                                            onClick={prevSlide}
+                                            className="absolute left-[-20px] md:left-[-60px] top-1/2 -translate-y-1/2 w-12 h-12 rounded-full glass-card border border-outline-variant/30 flex items-center justify-center text-primary shadow-lg hover:bg-primary hover:text-white transition active:scale-95 z-20"
+                                            aria-label="Reseña anterior"
+                                        >
+                                            <ChevronLeft size={24} />
+                                        </button>
+                                        <button 
+                                            onClick={nextSlide}
+                                            className="absolute right-[-20px] md:right-[-60px] top-1/2 -translate-y-1/2 w-12 h-12 rounded-full glass-card border border-outline-variant/30 flex items-center justify-center text-primary shadow-lg hover:bg-primary hover:text-white transition active:scale-95 z-20"
+                                            aria-label="Siguiente reseña"
+                                        >
+                                            <ChevronRight size={24} />
+                                        </button>
+                                    </>
+                                )}
+
+                                {/* Indicator Dots */}
+                                {reviews.length > 1 && (
+                                    <div className="flex justify-center gap-2 mt-8 z-10 relative">
+                                        {reviews.map((_, idx) => (
+                                            <button
+                                                key={idx}
+                                                onClick={() => setActiveIndex(idx)}
+                                                className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                                                    idx === activeIndex 
+                                                        ? 'bg-primary w-8 shadow-sm' 
+                                                        : 'bg-on-surface-variant/20 hover:bg-on-surface-variant/40'
+                                                }`}
+                                                aria-label={`Ir a reseña ${idx + 1}`}
+                                            ></button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-center py-12">
+                                <p className="text-on-surface-variant italic">No hay reseñas disponibles en este momento.</p>
+                            </div>
+                        )}
                     </div>
                 </section>
 

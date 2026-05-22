@@ -14,31 +14,42 @@ const SearchSitters = () => {
     const [sitters, setSitters] = useState([]);
 
     useEffect(() => {
-        // Fetch only registered sitters from our localStorage users array
+        // Fetch only registered sitters from our localStorage users array who have a completed profile
         const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        const registeredSitters = allUsers.filter(u => u.role === 'sitter').map(u => ({
-            id: u.id,
-            name: u.full_name,
-            city: u.city || 'Ciudad no especificada',
-            age: u.age || 25,
-            rate: u.rate || 15,
-            experience: u.experience || 1,
-            verified: u.verified || false,
-            avatar: u.avatar || '/child1.png',
-            rating: u.rating || 5.0,
-            description: u.description || 'Cuidador apasionado y responsable.',
-            superpowers: u.superpowers || ['Manualidades', 'Juegos creativos'],
-            comfortableWith: u.comfortableWith || ['Mascotas', 'Ayuda con tarea'],
-            availability: u.availability || {
-                LUN: { manana: true, mediodia: false, tarde: true, noche: false },
-                MAR: { manana: true, mediodia: true, tarde: true, noche: false },
-                MIE: { manana: false, mediodia: false, tarde: true, noche: true },
-                JUE: { manana: true, mediodia: true, tarde: false, noche: false },
-                VIE: { manana: true, mediodia: true, tarde: true, noche: true },
-                SAB: { manana: false, mediodia: false, tarde: false, noche: true },
-                DOM: { manana: false, mediodia: false, tarde: false, noche: false },
-            }
-        }));
+        const allReviews = JSON.parse(localStorage.getItem('reviews') || '[]');
+
+        const registeredSitters = allUsers
+            .filter(u => u.role === 'sitter' && u.description && u.rate)
+            .map(u => {
+                const sitterReviews = allReviews.filter(r => r.sitterId?.toString() === u.id?.toString());
+                const avgRating = sitterReviews.length > 0
+                    ? (sitterReviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / sitterReviews.length).toFixed(1)
+                    : (u.rating || 5.0).toFixed(1);
+
+                return {
+                    id: u.id,
+                    name: u.full_name,
+                    city: u.city || 'Ciudad no especificada',
+                    age: u.age || 25,
+                    rate: u.rate || 15,
+                    experience: u.experience || 1,
+                    verified: u.verified || false,
+                    avatar: u.avatar || '/child1.png',
+                    rating: parseFloat(avgRating),
+                    description: u.description || 'Cuidador apasionado y responsable.',
+                    superpowers: u.superpowers || ['Manualidades', 'Juegos creativos'],
+                    comfortableWith: u.comfortableWith || ['Mascotas', 'Ayuda con tarea'],
+                    availability: u.availability || {
+                        LUN: { manana: true, mediodia: false, tarde: true, noche: false },
+                        MAR: { manana: true, mediodia: true, tarde: true, noche: false },
+                        MIE: { manana: false, mediodia: false, tarde: true, noche: true },
+                        JUE: { manana: true, mediodia: true, tarde: false, noche: false },
+                        VIE: { manana: true, mediodia: true, tarde: true, noche: true },
+                        SAB: { manana: false, mediodia: false, tarde: false, noche: true },
+                        DOM: { manana: false, mediodia: false, tarde: false, noche: false },
+                    }
+                };
+            });
         
         // If there are no registered sitters, we can optionally still show mock ones 
         // but the user requested ONLY registered ones. We will show an empty state or the registered ones.
@@ -71,7 +82,7 @@ const SearchSitters = () => {
                                 </div>
                                 <p className="text-on-surface-variant text-sm mb-4 line-clamp-2 flex-grow">{sitter.description}</p>
                                 <div className="flex justify-between items-center mt-auto border-t border-outline-variant/30 pt-4">
-                                    <div className="font-bold text-primary text-lg">${sitter.rate}/hr</div>
+                                    <div className="font-bold text-primary text-lg">Bs. {sitter.rate}/hr</div>
                                     <div className="text-sm text-on-surface-variant">{sitter.experience} años exp.</div>
                                 </div>
                             </GlassCard>
