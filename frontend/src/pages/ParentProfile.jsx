@@ -100,7 +100,7 @@ const ParentProfile = () => {
                                 </div>
                                 <div className="flex justify-between items-center text-sm">
                                     <span className="text-on-surface-variant">Presupuesto:</span>
-                                    <span className="font-bold text-primary">${parent.budget || '--'}/hr</span>
+                                    <span className="font-bold text-primary">Bs. {parent.budget || '--'}/hr</span>
                                 </div>
                             </div>
                         </GlassCard>
@@ -144,6 +144,32 @@ const ParentProfile = () => {
                                     <span className="font-bold">Casa de la familia</span>
                                 </li>
                             </ul>
+                        </GlassCard>
+
+                        <GlassCard className="rounded-[40px] p-8 shadow-xl">
+                            <h2 className="font-display-lg text-2xl font-bold mb-4 flex items-center gap-2">
+                                <MapPin className="text-primary" /> Ubicación Familiar
+                            </h2>
+                            
+                            <div className="flex items-center gap-3 p-4 bg-primary/10 rounded-2xl mb-6 border border-primary/20 shadow-sm">
+                                <MapPin className="text-primary shrink-0" size={24} />
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-primary">Dirección Registrada</p>
+                                    <p className="text-on-surface font-semibold text-sm">{parent.city || 'No especificada'}</p>
+                                </div>
+                            </div>
+
+                            <div className="w-full h-64 rounded-3xl overflow-hidden border border-outline-variant/30 shadow-inner">
+                                <iframe 
+                                    title="Mapa de ubicación familiar"
+                                    width="100%" 
+                                    height="100%" 
+                                    style={{ border: 0 }}
+                                    loading="lazy"
+                                    allowFullScreen
+                                    src={`https://maps.google.com/maps?q=${encodeURIComponent(parent.city || 'La Paz, Bolivia')}&t=&z=15&ie=UTF8&output=embed`}
+                                ></iframe>
+                            </div>
                         </GlassCard>
                     </div>
                 </div>

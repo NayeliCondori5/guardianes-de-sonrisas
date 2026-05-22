@@ -29,8 +29,10 @@ export const AuthProvider = ({ children }) => {
     const register = async (userData) => {
         const response = await api.post('/auth/register', userData);
         const { user, access_token, refresh_token } = response.data.data;
+        localStorage.setItem('token', access_token);
         localStorage.setItem('access_token', access_token);
         localStorage.setItem('refresh_token', refresh_token);
+        localStorage.setItem('user', JSON.stringify(user));
         setUser(user);
         
         // Track for mock frontend metrics

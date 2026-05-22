@@ -67,10 +67,6 @@ const Register = () => {
                         <input type="email" className="w-full p-4 rounded-xl border-none bg-surface-container-low text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all shadow-inner" placeholder="correo@ejemplo.com" value={email} onChange={e => setEmail(e.target.value)} required />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-outline uppercase tracking-wider mb-2">Ciudad</label>
-                        <input type="text" className="w-full p-4 rounded-xl border-none bg-surface-container-low text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all shadow-inner" placeholder="Tu ciudad de residencia" value={city} onChange={e => setCity(e.target.value)} required />
-                    </div>
-                    <div>
                         <label className="block text-xs font-bold text-outline uppercase tracking-wider mb-2">Contraseña</label>
                         <input type="password" className="w-full p-4 rounded-xl border-none bg-surface-container-low text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all shadow-inner" placeholder="Mínimo 6 caracteres" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}/>
                     </div>

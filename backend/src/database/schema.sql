@@ -177,3 +177,20 @@ CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);
 CREATE INDEX IF NOT EXISTS idx_bookings_created ON bookings(created_at);
 CREATE INDEX IF NOT EXISTS idx_reviews_sitter ON reviews(sitter_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_visible ON reviews(is_visible);
+
+CREATE TABLE IF NOT EXISTS services (
+  id TEXT PRIMARY KEY,
+  sitter_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  category TEXT NOT NULL,
+  hourly_rate REAL NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (sitter_id) REFERENCES sitters(user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_services_sitter ON services(sitter_id);
+CREATE INDEX IF NOT EXISTS idx_services_status ON services(status);
+
