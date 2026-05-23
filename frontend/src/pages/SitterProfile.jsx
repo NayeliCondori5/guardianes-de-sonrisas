@@ -5,6 +5,7 @@ import GlassCard from '../components/common/GlassCard';
 import { useAuth } from '../context/AuthContext';
 import { MapPin, Star, ShieldCheck, Heart, Car, Home, Cigarette, BookOpen, Briefcase, X } from 'lucide-react';
 import CustomModal from '../components/common/CustomModal';
+import api from '../services/api';
 
 const SitterProfile = () => {
     const { id } = useParams();
@@ -21,50 +22,62 @@ const SitterProfile = () => {
     });
 
     useEffect(() => {
-        const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        const found = allUsers.find(s => s.id.toString() === id || s.id === id);
-        // Default detailed data if missing
-        if (found) {
-            const allReviews = JSON.parse(localStorage.getItem('reviews') || '[]');
-            const sitterReviews = allReviews.filter(r => r.sitterId?.toString() === found.id?.toString());
-            const avgRating = sitterReviews.length > 0
-                ? (sitterReviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / sitterReviews.length).toFixed(1)
-                : (found.rating || 5.0).toFixed(1);
+        const fetchSitterDetails = async () => {
+            try {
+                // Fetch sitter profile details from backend
+                const sitterResponse = await api.get(`/sitters/${id}`);
+                if (sitterResponse.data && sitterResponse.data.success) {
+                    const data = sitterResponse.data.data;
+                    
+                    const avgRating = data.reviews && data.reviews.length > 0
+                        ? (data.reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / data.reviews.length).toFixed(1)
+                        : (data.rating || 5.0).toFixed(1);
 
-            setSitter({
-                ...found,
-                name: found.full_name,
-                avatar: found.avatar || '/child1.png',
-                city: found.city || 'Ciudad no especificada',
-                rate: found.rate || 15,
-                age: found.age || 25,
-                rating: parseFloat(avgRating),
-                description: found.description || 'Cuidador apasionado y responsable.',
-                superpowers: found.superpowers || ['Manualidades', 'Leer a niños', 'Música', 'Juegos creativos'],
-                comfortableWith: found.comfortableWith || ['Mascotas', 'Ayuda con tarea', 'Cocinar'],
-                education: found.education || 'Licenciatura en Educación Infantil',
-                hasCar: found.hasCar !== undefined ? found.hasCar : true,
-                driverLicense: found.driverLicense !== undefined ? found.driverLicense : true,
-                smoker: found.smoker !== undefined ? found.smoker : false,
-                preferredLocation: found.preferredLocation || 'En casa de la familia',
-                lastActive: 'Hace 2 horas',
-                experience: found.experience || 3,
-                availability: found.availability || {
-                    LUN: { manana: true, mediodia: false, tarde: true, noche: false },
-                    MAR: { manana: true, mediodia: true, tarde: true, noche: false },
-                    MIE: { manana: false, mediodia: false, tarde: true, noche: true },
-                    JUE: { manana: true, mediodia: true, tarde: false, noche: false },
-                    VIE: { manana: true, mediodia: true, tarde: true, noche: true },
-                    SAB: { manana: false, mediodia: false, tarde: false, noche: true },
-                    DOM: { manana: false, mediodia: false, tarde: false, noche: false },
+                    setSitter({
+                        ...data,
+                        name: data.full_name,
+                        avatar: data.avatar_url || '/child1.png',
+                        city: data.city || 'Ciudad no especificada',
+                        rate: data.hourly_rate || 15,
+                        age: data.age || 25,
+                        rating: parseFloat(avgRating),
+                        description: data.description || 'Cuidador apasionado y responsable.',
+                        superpowers: data.superpowers || ['Manualidades', 'Leer a niños', 'Música', 'Juegos creativos'],
+                        comfortableWith: data.comfortable_with || ['Mascotas', 'Ayuda con tarea', 'Cocinar'],
+                        education: data.education || 'Licenciatura en Educación Infantil',
+                        hasCar: data.has_car !== undefined ? !!data.has_car : true,
+                        driverLicense: data.driver_license !== undefined ? !!data.driver_license : true,
+                        smoker: data.smoker !== undefined ? !!data.smoker : false,
+                        preferredLocation: data.preferred_location || 'En casa de la familia',
+                        lastActive: 'Hace 2 horas',
+                        experience: data.experience_years || 3,
+                        availability: data.availability || {
+                            LUN: { manana: true, mediodia: false, tarde: true, noche: false },
+                            MAR: { manana: true, mediodia: true, tarde: true, noche: false },
+                            MIE: { manana: false, mediodia: false, tarde: true, noche: true },
+                            JUE: { manana: true, mediodia: true, tarde: false, noche: false },
+                            VIE: { manana: true, mediodia: true, tarde: true, noche: true },
+                            SAB: { manana: false, mediodia: false, tarde: false, noche: true },
+                            DOM: { manana: false, mediodia: false, tarde: false, noche: false },
+                        }
+                    });
                 }
-            });
-
-            // Fetch approved services for this sitter
-            const allServices = JSON.parse(localStorage.getItem('services') || '[]');
-            const approved = allServices.filter(s => (s.sitter_id?.toString() === found.id?.toString()) && s.status === 'approved');
-            setSitterServices(approved);
-        }
+                
+                // Fetch approved services from backend
+                const servicesResponse = await api.get(`/services?sitter_id=${id}&status=approved`);
+                if (servicesResponse.data && servicesResponse.data.success) {
+                    const servicesData = servicesResponse.data.data.map(s => ({
+                        ...s,
+                        rate: s.hourly_rate // map rate key for profile page UI
+                    }));
+                    setSitterServices(servicesData);
+                }
+            } catch (err) {
+                console.error('Error fetching sitter details:', err);
+            }
+        };
+        
+        fetchSitterDetails();
     }, [id]);
 
     const handleRequest = () => {
@@ -99,41 +112,44 @@ const SitterProfile = () => {
         setIsBookingModalOpen(true);
     };
 
-    const submitBookingRequest = () => {
-        const requests = JSON.parse(localStorage.getItem('booking_requests') || '[]');
-        
-        const isDefault = bookingForm.selectedServiceId === 'default';
-        const activeService = isDefault 
-            ? null 
-            : sitterServices.find(s => s.id === bookingForm.selectedServiceId);
+    const submitBookingRequest = async () => {
+        try {
+            const isDefault = bookingForm.selectedServiceId === 'default';
+            const activeService = isDefault 
+                ? null 
+                : sitterServices.find(s => s.id === bookingForm.selectedServiceId);
+                
+            const message = activeService 
+                ? `Servicio Especializado: ${activeService.title}` 
+                : 'Cuidado General';
             
-        const appliedRate = activeService ? activeService.rate : sitter.rate;
-        const total = appliedRate * bookingForm.hours;
+            const start = `${bookingForm.date}T09:00:00`;
+            const end = `${bookingForm.date}T13:00:00`;
 
-        const newRequest = {
-            id: Date.now(),
-            parentId: user.id?.toString() || 'parent1',
-            parentName: user.full_name,
-            sitterId: sitter.id,
-            sitterName: sitter.name,
-            status: 'PENDIENTE',
-            date: bookingForm.date,
-            hours: bookingForm.hours,
-            total: total,
-            serviceTitle: activeService ? activeService.title : 'Cuidado General',
-            serviceCategory: activeService ? activeService.category : 'Cuidado General / Juegos'
-        };
-        
-        requests.push(newRequest);
-        localStorage.setItem('booking_requests', JSON.stringify(requests));
-        
-        setIsBookingModalOpen(false);
-        setModal({
-            isOpen: true,
-            title: "¡Solicitud Enviada!",
-            message: `Has solicitado a ${sitter.name} para el servicio "${newRequest.serviceTitle}". El cuidador recibirá una notificación en su panel.`,
-            type: 'success'
-        });
+            await api.post('/bookings', {
+                sitter_id: sitter.id,
+                start_datetime: start,
+                end_datetime: end,
+                total_hours: bookingForm.hours,
+                message: message
+            });
+
+            setIsBookingModalOpen(false);
+            setModal({
+                isOpen: true,
+                title: "¡Solicitud Enviada!",
+                message: `Has solicitado a ${sitter.name} para el servicio. El cuidador recibirá una notificación en su panel.`,
+                type: 'success'
+            });
+        } catch (err) {
+            console.error('Error submitting booking request:', err);
+            setModal({
+                isOpen: true,
+                title: "Error",
+                message: "No se pudo registrar la solicitud. Por favor intenta de nuevo.",
+                type: 'error'
+            });
+        }
     };
 
     if (!sitter) return <div>Cargando...</div>;

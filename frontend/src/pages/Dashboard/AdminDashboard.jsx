@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Navbar from '../../components/common/Navbar';
 import GlassCard from '../../components/common/GlassCard';
 import { Users, BookOpen, DollarSign, Activity, Clock, Trash2, Edit, Plus, Search, X, AlertTriangle, Check, Briefcase, CheckCircle } from 'lucide-react';
+import api from '../../services/api';
 
 const AdminDashboard = () => {
     const [stats, setStats] = useState({
@@ -36,86 +37,102 @@ const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('general');
     const [services, setServices] = useState([]);
 
-    const refreshServices = () => {
-        const allServices = JSON.parse(localStorage.getItem('services') || '[]');
-        setServices(allServices);
+    const refreshServices = async () => {
+        try {
+            const response = await api.get('/services?status=pending');
+            if (response.data && response.data.success) {
+                const mapped = response.data.data.map(s => ({
+                    ...s,
+                    rate: s.hourly_rate
+                }));
+                setServices(mapped);
+            }
+        } catch (err) {
+            console.error('Error fetching pending services:', err);
+        }
     };
 
-    const handleValidateService = (id, newStatus) => {
-        const allServices = JSON.parse(localStorage.getItem('services') || '[]');
-        const updated = allServices.map(s => {
-            if (s.id === id) {
-                return { ...s, status: newStatus };
-            }
-            return s;
-        });
-        localStorage.setItem('services', JSON.stringify(updated));
-        refreshServices();
-        window.dispatchEvent(new Event('storage'));
+    const handleValidateService = async (id, newStatus) => {
+        try {
+            await api.put(`/services/${id}/validate`, { status: newStatus });
+            refreshServices();
+            refreshData();
+        } catch (err) {
+            console.error('Error validating service:', err);
+        }
     };
 
-
-
-    const refreshData = () => {
-        const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        setUsers(allUsers);
-        refreshServices();
-        
-        const parents = allUsers.filter(u => u.role === 'parent').length;
-        const sitters = allUsers.filter(u => u.role === 'sitter').length;
-        
-        const reqs = JSON.parse(localStorage.getItem('booking_requests') || '[]');
-        const active = reqs.filter(r => r.status === 'CONFIRMADO').length;
-        const pendingPay = reqs.filter(r => r.status === 'PAGADO').length;
-        const completed = reqs.filter(r => r.status === 'COMPLETADO');
-        
-        let income = 0;
-        completed.forEach(r => {
-            income += (r.total * 0.10);
-        });
-
-        setStats({
-            totalUsers: allUsers.length,
-            parents,
-            sitters,
-            activeReservations: active,
-            totalIncome: income,
-            pendingPayments: pendingPay
-        });
-
-        const sitterMap = {};
-        completed.forEach(r => {
-            if(!sitterMap[r.sitterName]) {
-                sitterMap[r.sitterName] = { name: r.sitterName, totalGenerated: 0, commission: 0, completedJobs: 0 };
+    const refreshData = async () => {
+        try {
+            // 1. Get users
+            const usersResponse = await api.get('/admin/users');
+            let allUsers = [];
+            if (usersResponse.data && usersResponse.data.success) {
+                allUsers = usersResponse.data.data;
+                setUsers(allUsers);
             }
-            sitterMap[r.sitterName].totalGenerated += r.total;
-            sitterMap[r.sitterName].commission += (r.total * 0.10);
-            sitterMap[r.sitterName].completedJobs += 1;
-        });
-        setPaymentsBySitter(Object.values(sitterMap));
 
-        const activity = reqs.map(r => ({
-            id: r.id,
-            time: 'Reciente',
-            title: r.status === 'COMPLETADO' ? 'Reserva Completada' : r.status === 'CONFIRMADO' ? 'Reserva Confirmada' : 'Actividad',
-            desc: r.status === 'COMPLETADO' 
-                ? `${r.parentName} pagó Bs. ${r.total} (Comisión: Bs. ${(r.total * 0.10).toFixed(2)})`
-                : `${r.parentName} solicitó a ${r.sitterName}`,
-            color: r.status === 'COMPLETADO' ? 'bg-secondary' : r.status === 'CONFIRMADO' ? 'bg-primary' : 'bg-yellow-500'
-        })).reverse().slice(0, 5);
+            // 2. Get bookings
+            const bookingsResponse = await api.get('/admin/bookings');
+            let allBookings = [];
+            if (bookingsResponse.data && bookingsResponse.data.success) {
+                allBookings = bookingsResponse.data.data;
+            }
 
-        setRecentActivity(activity);
+            // 3. Get pending services
+            refreshServices();
+
+            // 4. Get stats
+            const statsResponse = await api.get('/admin/stats');
+            if (statsResponse.data && statsResponse.data.success) {
+                const s = statsResponse.data.data;
+                setStats({
+                    totalUsers: s.users.total,
+                    parents: s.users.parents,
+                    sitters: s.users.sitters,
+                    activeReservations: allBookings.filter(b => b.status === 'confirmed').length,
+                    totalIncome: s.revenue.total_fees,
+                    pendingPayments: s.payments.pending
+                });
+            }
+
+            // 5. Calculate paymentsBySitter
+            const completed = allBookings.filter(b => b.status === 'completed');
+            const sitterMap = {};
+            completed.forEach(r => {
+                if(!sitterMap[r.sitterName]) {
+                    sitterMap[r.sitterName] = { name: r.sitterName, totalGenerated: 0, commission: 0, completedJobs: 0 };
+                }
+                sitterMap[r.sitterName].totalGenerated += r.total_amount;
+                sitterMap[r.sitterName].commission += r.platform_fee;
+                sitterMap[r.sitterName].completedJobs += 1;
+            });
+            setPaymentsBySitter(Object.values(sitterMap));
+
+            // 6. Calculate recentActivity
+            const activity = allBookings.map(r => ({
+                id: r.id,
+                time: 'Reciente',
+                title: r.status === 'completed' ? 'Reserva Completada' : r.status === 'confirmed' ? 'Reserva Confirmada' : 'Actividad',
+                desc: r.status === 'completed' 
+                    ? `${r.parentName} pagó Bs. ${r.total_amount} (Comisión: Bs. ${r.platform_fee.toFixed(2)})`
+                    : `${r.parentName} solicitó a ${r.sitterName}`,
+                color: r.status === 'completed' ? 'bg-secondary' : r.status === 'confirmed' ? 'bg-primary' : 'bg-yellow-500'
+            })).slice(0, 5);
+            setRecentActivity(activity);
+
+        } catch (err) {
+            console.error('Error refreshing admin data:', err);
+        }
     };
 
     useEffect(() => {
         refreshData();
-        window.addEventListener('storage', refreshData);
-        return () => window.removeEventListener('storage', refreshData);
     }, []);
 
     const openModal = (mode, user = null) => {
         setModalMode(mode);
-        setSelectedUser(user); // Set it for all modes (edit, delete)
+        setSelectedUser(user);
         
         if (mode === 'edit' && user) {
             setFormData({
@@ -143,26 +160,21 @@ const AdminDashboard = () => {
         setIsModalOpen(true);
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         if (e) e.preventDefault();
-        let allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        
-        if (modalMode === 'add') {
-            const newUser = { 
-                id: Date.now().toString(), 
-                ...formData, 
-                created_at: new Date().toISOString() 
-            };
-            allUsers.push(newUser);
-        } else if (modalMode === 'edit') {
-            allUsers = allUsers.map(u => u.id?.toString() === selectedUser?.id?.toString() ? { ...u, ...formData } : u);
-        } else if (modalMode === 'delete') {
-            allUsers = allUsers.filter(u => u.id?.toString() !== selectedUser?.id?.toString());
+        try {
+            if (modalMode === 'add') {
+                await api.post('/admin/users', formData);
+            } else if (modalMode === 'edit') {
+                await api.put(`/admin/users/${selectedUser.id}`, formData);
+            } else if (modalMode === 'delete') {
+                await api.delete(`/admin/users/${selectedUser.id}`);
+            }
+            setIsModalOpen(false);
+            refreshData();
+        } catch (err) {
+            console.error('Error updating users:', err);
         }
-        
-        localStorage.setItem('users', JSON.stringify(allUsers));
-        setIsModalOpen(false);
-        refreshData();
     };
 
     const filteredUsers = users.filter(u => 

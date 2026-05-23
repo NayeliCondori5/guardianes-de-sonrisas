@@ -18,22 +18,28 @@ router.get('/info', (req, res) => {
 
 router.post('/:bookingId/upload-receipt', authenticateToken, upload.single('receipt'), (req, res) => {
     if (req.user.role !== 'parent') return res.status(403).json({ success: false, message: 'Solo padres' });
-    if (!req.file) return res.status(400).json({ success: false, message: 'Comprobante requerido' });
 
     try {
-        const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND parent_id = ? AND status = "awaiting_payment"').get(req.params.bookingId, req.user.id);
-        if (!booking) return res.status(400).json({ success: false, message: 'Reserva no válida para pago' });
+        const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND parent_id = ?').get(req.params.bookingId, req.user.id);
+        if (!booking) return res.status(400).json({ success: false, message: 'Reserva no encontrada o no pertenece a este usuario' });
 
-        const receiptUrl = `/uploads/${req.file.filename}`;
+        const receiptUrl = req.file ? `/uploads/${req.file.filename}` : (req.body.receipt_url || '/uploads/default-receipt.png');
+        
         db.transaction(() => {
-            db.prepare(`
-                INSERT INTO payments (id, booking_id, amount, method, receipt_url, status)
-                VALUES (?, ?, ?, ?, ?, 'pending')
-            `).run(uuidv4(), booking.id, booking.total_amount, req.body.method || 'deposit', receiptUrl);
+            const existing = db.prepare('SELECT id FROM payments WHERE booking_id = ?').get(booking.id);
+            if (existing) {
+                db.prepare('UPDATE payments SET receipt_url = ?, status = "pending" WHERE booking_id = ?').run(receiptUrl, booking.id);
+            } else {
+                db.prepare(`
+                    INSERT INTO payments (id, booking_id, amount, method, receipt_url, status)
+                    VALUES (?, ?, ?, ?, ?, 'pending')
+                `).run(uuidv4(), booking.id, booking.total_amount, req.body.method || 'deposit', receiptUrl);
+            }
         })();
 
         res.json({ success: true, message: 'Comprobante subido. Esperando confirmación de un administrador.' });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ success: false, message: 'Error interno' });
     }
 });
