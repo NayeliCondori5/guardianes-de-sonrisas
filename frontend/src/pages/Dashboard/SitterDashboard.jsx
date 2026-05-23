@@ -5,6 +5,7 @@ import GlassCard from '../../components/common/GlassCard';
 import { Calendar, Clock, DollarSign, Star, Camera, Check, Eye, Trash2, Edit, AlertTriangle, MapPin, Briefcase, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CustomModal from '../../components/common/CustomModal';
+import api from '../../services/api';
 
 const SitterDashboard = () => {
     const { user, logout } = useAuth();
@@ -69,35 +70,78 @@ const SitterDashboard = () => {
         setProfileForm(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleDeleteAccount = () => {
-        const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        const updatedUsers = allUsers.filter(u => u.id?.toString() !== user.id?.toString());
-        localStorage.setItem('users', JSON.stringify(updatedUsers));
-        
-        setShowDeleteConfirm(false);
-        logout();
+    const handleDeleteAccount = async () => {
+        try {
+            await api.delete('/users/account');
+            setShowDeleteConfirm(false);
+            logout();
+        } catch(err) {
+            console.error(err);
+        }
     };
 
-    const refreshServices = () => {
+    const refreshServices = async () => {
         if (!user) return;
-        const allServices = JSON.parse(localStorage.getItem('services') || '[]');
-        const filtered = allServices.filter(s => s.sitter_id?.toString() === user.id?.toString());
-        setMyServices(filtered);
+        try {
+            const response = await api.get(`/services?sitter_id=${user.id}`);
+            if (response.data && response.data.success) {
+                const mapped = response.data.data.map(s => ({
+                    ...s,
+                    rate: s.hourly_rate
+                }));
+                setMyServices(mapped);
+            }
+        } catch (err) {
+            console.error('Error fetching services:', err);
+        }
     };
 
-    const refreshData = () => {
-        const reqs = JSON.parse(localStorage.getItem('booking_requests') || '[]');
-        const myReqs = reqs.filter(r => r.sitterId === (user?.id || 1));
-        setRequests(myReqs);
-        
-        const completed = myReqs.filter(r => r.status === 'COMPLETADO');
-        const total = completed.reduce((acc, r) => acc + (r.total * 0.9), 0);
-        setEarnings(total);
-
-        refreshServices();
+    const refreshData = async () => {
+        if (!user) return;
+        try {
+            const response = await api.get('/bookings/my');
+            if (response.data && response.data.success) {
+                const mappedReqs = response.data.data.map(b => {
+                    let status = b.status.toUpperCase();
+                    if (b.status === 'awaiting_payment' && b.payment_status === 'pending') {
+                        status = 'PAGADO';
+                    } else if (b.status === 'awaiting_payment') {
+                        status = 'ACEPTADA';
+                    } else if (b.status === 'confirmed') {
+                        status = 'CONFIRMADO';
+                    } else if (b.status === 'completed') {
+                        status = 'COMPLETADO';
+                    } else if (b.status === 'rejected') {
+                        status = 'RECHAZADA';
+                    } else if (b.status === 'cancelled') {
+                        status = 'CANCELADO';
+                    }
+                    
+                    return {
+                        id: b.id,
+                        parentId: b.parent_id,
+                        parentName: b.parent_name || 'Padre',
+                        sitterId: b.sitter_id,
+                        status: status,
+                        date: b.start_datetime ? b.start_datetime.split('T')[0] : '',
+                        hours: b.total_hours,
+                        total: b.total_amount,
+                        serviceTitle: b.message || 'Cuidado General',
+                    };
+                });
+                setRequests(mappedReqs);
+                
+                const completed = mappedReqs.filter(r => r.status === 'COMPLETADO' || r.status === 'CONFIRMADO');
+                const total = completed.reduce((acc, r) => acc + (r.total * 0.9), 0);
+                setEarnings(total);
+            }
+            refreshServices();
+        } catch(err) {
+            console.error(err);
+        }
     };
 
-    const handleSaveService = (e) => {
+    const handleSaveService = async (e) => {
         e.preventDefault();
         if (!serviceForm.title || !serviceForm.description || !serviceForm.rate) {
             setModal({
@@ -109,155 +153,152 @@ const SitterDashboard = () => {
             return;
         }
 
-        const allServices = JSON.parse(localStorage.getItem('services') || '[]');
-        
-        if (editingService) {
-            // HU-02: Check if attributes actually changed, if critical attributes change, reset status to 'pending'
-            const isCriticalChange = 
-                editingService.title !== serviceForm.title ||
-                editingService.description !== serviceForm.description ||
-                editingService.category !== serviceForm.category ||
-                Number(editingService.rate) !== Number(serviceForm.rate);
+        try {
+            if (editingService) {
+                const response = await api.put(`/services/${editingService.id}`, {
+                    title: serviceForm.title,
+                    description: serviceForm.description,
+                    category: serviceForm.category,
+                    hourly_rate: Number(serviceForm.rate)
+                });
+                
+                setModal({
+                    isOpen: true,
+                    title: "Servicio Actualizado",
+                    message: response.data.message || "Tus cambios se han guardado con éxito.",
+                    type: 'success'
+                });
+            } else {
+                await api.post('/services', {
+                    title: serviceForm.title,
+                    description: serviceForm.description,
+                    category: serviceForm.category,
+                    hourly_rate: Number(serviceForm.rate)
+                });
 
-            const updatedServices = allServices.map(s => {
-                if (s.id === editingService.id) {
-                    return {
-                        ...s,
-                        title: serviceForm.title,
-                        description: serviceForm.description,
-                        category: serviceForm.category,
-                        rate: Number(serviceForm.rate),
-                        status: isCriticalChange ? 'pending' : s.status
-                    };
-                }
-                return s;
-            });
-            localStorage.setItem('services', JSON.stringify(updatedServices));
-            
+                setModal({
+                    isOpen: true,
+                    title: "Servicio Creado",
+                    message: "Tu servicio especializado ha sido creado con éxito. Se encuentra en estado 'Pendiente' de revisión por el administrador antes de ser visible para los padres.",
+                    type: 'success'
+                });
+            }
+
+            setIsAddingService(false);
+            setEditingService(null);
+            setServiceForm({ title: '', category: 'Cuidado General / Juegos', rate: '', description: '' });
+            refreshServices();
+        } catch (err) {
+            console.error(err);
             setModal({
                 isOpen: true,
-                title: "Servicio Actualizado",
-                message: isCriticalChange 
-                    ? "Tus cambios se han guardado con éxito. Al editar campos críticos, el servicio ha regresado al estado 'Pendiente' para validación del administrador."
-                    : "El servicio se ha actualizado sin cambios en campos críticos.",
-                type: 'success'
-            });
-        } else {
-            // HU-01: Add new service with status 'pending'
-            const newService = {
-                id: Date.now().toString(),
-                sitter_id: user.id,
-                sitter_name: user.full_name,
-                title: serviceForm.title,
-                description: serviceForm.description,
-                category: serviceForm.category,
-                rate: Number(serviceForm.rate),
-                status: 'pending'
-            };
-            allServices.push(newService);
-            localStorage.setItem('services', JSON.stringify(allServices));
-
-            setModal({
-                isOpen: true,
-                title: "Servicio Creado",
-                message: "Tu servicio especializado ha sido creado con éxito. Se encuentra en estado 'Pendiente' de revisión por el administrador antes de ser visible para los padres.",
-                type: 'success'
+                title: "Error",
+                message: "No se pudo guardar el servicio. Intenta de nuevo.",
+                type: 'error'
             });
         }
-
-        setIsAddingService(false);
-        setEditingService(null);
-        setServiceForm({ title: '', category: 'Cuidado General / Juegos', rate: '', description: '' });
-        refreshServices();
-        window.dispatchEvent(new Event('storage'));
     };
 
-    const handleDeleteService = (id) => {
-        const allServices = JSON.parse(localStorage.getItem('services') || '[]');
-        const filtered = allServices.filter(s => s.id !== id);
-        localStorage.setItem('services', JSON.stringify(filtered));
-
-        setModal({
-            isOpen: true,
-            title: "Servicio Eliminado",
-            message: "El servicio ha sido removido exitosamente del catálogo.",
-            type: 'success'
-        });
-
-        refreshServices();
-        window.dispatchEvent(new Event('storage'));
+    const handleDeleteService = async (id) => {
+        try {
+            await api.delete(`/services/${id}`);
+            setModal({
+                isOpen: true,
+                title: "Servicio Eliminado",
+                message: "El servicio ha sido removido exitosamente del catálogo.",
+                type: 'success'
+            });
+            refreshServices();
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     useEffect(() => {
-        if (user) {
-            refreshData();
-            
-            // Get the complete user from global localStorage 'users' to avoid losing fields
-            const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-            const dbUser = allUsers.find(u => u.id?.toString() === user.id?.toString()) || user;
-
-            // Sync states when user data arrives
-            setAvailability(dbUser.availability || {
-                LUN: { manana: false, mediodia: false, tarde: false, noche: false },
-                MAR: { manana: false, mediodia: false, tarde: false, noche: false },
-                MIE: { manana: false, mediodia: false, tarde: false, noche: false },
-                JUE: { manana: false, mediodia: false, tarde: false, noche: false },
-                VIE: { manana: false, mediodia: false, tarde: false, noche: false },
-                SAB: { manana: false, mediodia: false, tarde: false, noche: false },
-                DOM: { manana: false, mediodia: false, tarde: false, noche: false },
-            });
-            setSelectedSuperpowers(dbUser.superpowers || []);
-            setSelectedComfortable(dbUser.comfortableWith || []);
-            setProfileImage(dbUser.avatar || null);
-            
-            // Sync form fields
-            setProfileForm({
-                full_name: dbUser.full_name || user.full_name || '',
-                city: dbUser.city || user.city || '',
-                age: dbUser.age || '',
-                rate: dbUser.rate || '',
-                experience: dbUser.experience || '',
-                description: dbUser.description || '',
-                education: dbUser.education || 'Estudiante Universitario',
-                driverLicense: dbUser.driverLicense ? 'Sí' : 'No',
-                hasCar: dbUser.hasCar ? 'Sí' : 'No',
-                smoker: dbUser.smoker ? 'Sí' : 'No',
-                preferredLocation: dbUser.preferredLocation || 'En casa de la familia'
-            });
-        }
-        window.addEventListener('storage', refreshData);
-        return () => window.removeEventListener('storage', refreshData);
+        const loadDashboard = async () => {
+            if (!user) return;
+            try {
+                await refreshData();
+                
+                // Fetch profile from backend
+                const profileResponse = await api.get('/users/profile');
+                if (profileResponse.data && profileResponse.data.success) {
+                    const dbUser = profileResponse.data.data;
+                    
+                    setAvailability(dbUser.availability || {
+                        LUN: { manana: false, mediodia: false, tarde: false, noche: false },
+                        MAR: { manana: false, mediodia: false, tarde: false, noche: false },
+                        MIE: { manana: false, mediodia: false, tarde: false, noche: false },
+                        JUE: { manana: false, mediodia: false, tarde: false, noche: false },
+                        VIE: { manana: false, mediodia: false, tarde: false, noche: false },
+                        SAB: { manana: false, mediodia: false, tarde: false, noche: false },
+                        DOM: { manana: false, mediodia: false, tarde: false, noche: false },
+                    });
+                    setSelectedSuperpowers(dbUser.superpowers || []);
+                    setSelectedComfortable(dbUser.comfortableWith || dbUser.comfortable_with || []);
+                    setProfileImage(dbUser.avatar_url || dbUser.avatar || null);
+                    
+                    setProfileForm({
+                        full_name: dbUser.full_name || '',
+                        city: dbUser.city || '',
+                        age: dbUser.age || '',
+                        rate: dbUser.rate || dbUser.hourly_rate || '',
+                        experience: dbUser.experience || dbUser.experience_years || '',
+                        description: dbUser.description || '',
+                        education: dbUser.education || 'Estudiante Universitario',
+                        driverLicense: dbUser.driverLicense ? 'Sí' : 'No',
+                        hasCar: dbUser.hasCar ? 'Sí' : 'No',
+                        smoker: dbUser.smoker ? 'Sí' : 'No',
+                        preferredLocation: dbUser.preferredLocation || 'En casa de la familia'
+                    });
+                }
+            } catch (err) {
+                console.error('Error loading dashboard data:', err);
+            }
+        };
+        
+        loadDashboard();
     }, [user]);
 
-    const handleAction = (id, newStatus) => {
-        const reqs = JSON.parse(localStorage.getItem('booking_requests') || '[]');
-        const updated = reqs.map(r => r.id === id ? { ...r, status: newStatus } : r);
-        localStorage.setItem('booking_requests', JSON.stringify(updated));
-        refreshData();
-        window.dispatchEvent(new Event('storage'));
+    const handleAction = async (id, newStatus) => {
+        try {
+            if (newStatus === 'ACEPTADA') {
+                await api.put(`/bookings/${id}/accept`);
+            } else if (newStatus === 'RECHAZADA') {
+                await api.put(`/bookings/${id}/reject`, { reason: 'No disponible' });
+            } else if (newStatus === 'CONFIRMADO') {
+                await api.put(`/bookings/${id}/confirm`);
+            }
+            refreshData();
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     const handleImageUpload = (e) => {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onloadend = () => {
+            reader.onloadend = async () => {
                 const base64 = reader.result;
-                setProfileImage(base64);
-                
-                const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-                const updatedUsers = allUsers.map(u => u.id === user.id ? { ...u, avatar: base64 } : u);
-                localStorage.setItem('users', JSON.stringify(updatedUsers));
-                
-                const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-                localStorage.setItem('user', JSON.stringify({ ...currentUser, avatar: base64 }));
-                
-                setModal({
-                    isOpen: true,
-                    title: "Foto Actualizada",
-                    message: "Tu nueva foto de perfil se ha guardado correctamente.",
-                    type: 'success'
-                });
+                try {
+                    await api.put('/users/profile', {
+                        avatar_url: base64
+                    });
+                    setProfileImage(base64);
+                    
+                    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+                    localStorage.setItem('user', JSON.stringify({ ...currentUser, avatar: base64 }));
+                    
+                    setModal({
+                        isOpen: true,
+                        title: "Foto Actualizada",
+                        message: "Tu nueva foto de perfil se ha guardado correctamente.",
+                        type: 'success'
+                    });
+                } catch (err) {
+                    console.error('Error uploading image:', err);
+                }
             };
             reader.readAsDataURL(file);
         }
@@ -510,38 +551,35 @@ const SitterDashboard = () => {
                                 )
                             ) : (
                                 <GlassCard className="rounded-[32px] p-8 shadow-md">
-                                    <form className="grid grid-cols-1 md:grid-cols-2 gap-6" onSubmit={(e) => {
+                                    <form className="grid grid-cols-1 md:grid-cols-2 gap-6" onSubmit={async (e) => {
                                         e.preventDefault();
-                                        const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-                                        const updatedData = {
-                                            ...profileForm,
-                                            driverLicense: profileForm.driverLicense === 'Sí',
-                                            hasCar: profileForm.hasCar === 'Sí',
-                                            smoker: profileForm.smoker === 'Sí',
-                                            superpowers: selectedSuperpowers,
-                                            comfortableWith: selectedComfortable,
-                                            availability: availability
-                                        };
-                                        const updatedUsers = allUsers.map(u => {
-                                            if (u.id?.toString() === user.id?.toString()) {
-                                                return { ...u, ...updatedData };
-                                            }
-                                            return u;
-                                        });
-                                        localStorage.setItem('users', JSON.stringify(updatedUsers));
-                                        
-                                        // Update session
-                                        const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-                                        const finalUser = { ...currentUser, ...updatedData };
-                                        localStorage.setItem('user', JSON.stringify(finalUser));
-                                        
-                                        setIsEditingProfile(false);
-                                        setModal({
-                                            isOpen: true,
-                                            title: "Perfil Guardado",
-                                            message: "Tus cambios se han guardado con éxito y son visibles para los padres.",
-                                            type: 'success'
-                                        });
+                                        try {
+                                            const updatedData = {
+                                                ...profileForm,
+                                                driverLicense: profileForm.driverLicense === 'Sí',
+                                                hasCar: profileForm.hasCar === 'Sí',
+                                                smoker: profileForm.smoker === 'Sí',
+                                                superpowers: selectedSuperpowers,
+                                                comfortableWith: selectedComfortable,
+                                                availability: availability
+                                            };
+                                            
+                                            await api.put('/users/profile', updatedData);
+                                            
+                                            // Update session
+                                            const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+                                            localStorage.setItem('user', JSON.stringify({ ...currentUser, ...updatedData }));
+                                            
+                                            setIsEditingProfile(false);
+                                            setModal({
+                                                isOpen: true,
+                                                title: "Perfil Guardado",
+                                                message: "Tus cambios se han guardado con éxito y son visibles para los padres.",
+                                                type: 'success'
+                                            });
+                                        } catch (err) {
+                                            console.error('Error saving profile:', err);
+                                        }
                                     }}>
                                         <div><label className="block text-xs font-bold mb-2 uppercase text-outline">Nombre</label><input type="text" name="full_name" className="w-full p-3 rounded-xl bg-surface-container-low border border-outline-variant" value={profileForm.full_name} onChange={handleFormChange}/></div>
                                         <div>

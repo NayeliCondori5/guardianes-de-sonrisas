@@ -18,6 +18,11 @@ CREATE TABLE IF NOT EXISTS parents (
   children_ages TEXT,
   preferred_rate_min REAL,
   preferred_rate_max REAL,
+  kids_count INTEGER,
+  family_desc TEXT,
+  needs TEXT,
+  budget REAL,
+  payment_pref TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
@@ -33,6 +38,15 @@ CREATE TABLE IF NOT EXISTS sitters (
   featured_until TEXT,
   verified_by TEXT,
   verified_at TEXT,
+  age INTEGER,
+  education TEXT,
+  driver_license INTEGER DEFAULT 0,
+  has_car INTEGER DEFAULT 0,
+  smoker INTEGER DEFAULT 0,
+  preferred_location TEXT,
+  superpowers TEXT,
+  comfortable_with TEXT,
+  availability TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (verified_by) REFERENCES users(id) ON DELETE SET NULL
 );

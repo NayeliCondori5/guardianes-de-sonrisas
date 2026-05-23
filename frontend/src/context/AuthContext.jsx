@@ -35,11 +35,6 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('user', JSON.stringify(user));
         setUser(user);
         
-        // Track for mock frontend metrics
-        const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        allUsers.push(user);
-        localStorage.setItem('users', JSON.stringify(allUsers));
-        
         return user;
     };
 

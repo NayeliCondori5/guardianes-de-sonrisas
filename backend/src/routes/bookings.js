@@ -36,14 +36,37 @@ router.get('/my', authenticateToken, (req, res) => {
     try {
         let query;
         if (req.user.role === 'parent') {
-            query = `SELECT b.*, u.full_name as sitter_name, u.avatar_url as sitter_avatar FROM bookings b JOIN users u ON b.sitter_id = u.id WHERE b.parent_id = ? ORDER BY b.created_at DESC`;
+            query = `
+                SELECT b.*, u.full_name as sitter_name, u.avatar_url as sitter_avatar, p.status as payment_status,
+                       (SELECT COUNT(*) FROM reviews r WHERE r.booking_id = b.id) as review_count
+                FROM bookings b 
+                JOIN users u ON b.sitter_id = u.id 
+                LEFT JOIN payments p ON b.id = p.booking_id
+                WHERE b.parent_id = ? 
+                ORDER BY b.created_at DESC
+            `;
         } else if (req.user.role === 'sitter') {
-            query = `SELECT b.*, u.full_name as parent_name, u.avatar_url as parent_avatar FROM bookings b JOIN users u ON b.parent_id = u.id WHERE b.sitter_id = ? ORDER BY b.created_at DESC`;
+            query = `
+                SELECT b.*, u.full_name as parent_name, u.avatar_url as parent_avatar, p.status as payment_status,
+                       (SELECT COUNT(*) FROM reviews r WHERE r.booking_id = b.id) as review_count
+                FROM bookings b 
+                JOIN users u ON b.parent_id = u.id 
+                LEFT JOIN payments p ON b.id = p.booking_id
+                WHERE b.sitter_id = ? 
+                ORDER BY b.created_at DESC
+            `;
         } else {
             return res.status(403).json({ success: false });
         }
         const bookings = db.prepare(query).all(req.user.id);
-        res.json({ success: true, data: bookings });
+        
+        // Map reviewed boolean
+        const mappedBookings = bookings.map(b => ({
+            ...b,
+            reviewed: b.review_count > 0
+        }));
+        
+        res.json({ success: true, data: mappedBookings });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Error interno' });
     }
@@ -78,6 +101,40 @@ router.put('/:id/complete', authenticateToken, (req, res) => {
         if (result.changes === 0) return res.status(400).json({ success: false, message: 'No se puede completar esta reserva' });
         res.json({ success: true, message: 'Reserva marcada como completada' });
     } catch (err) {
+        res.status(500).json({ success: false });
+    }
+});
+
+router.put('/:id/cancel', authenticateToken, (req, res) => {
+    try {
+        const booking = db.prepare('SELECT parent_id, sitter_id FROM bookings WHERE id = ?').get(req.params.id);
+        if (!booking) return res.status(404).json({ success: false, message: 'Reserva no encontrada' });
+        
+        // Either parent or sitter can cancel
+        if (booking.parent_id !== req.user.id && booking.sitter_id !== req.user.id) {
+            return res.status(403).json({ success: false, message: 'No autorizado' });
+        }
+        
+        db.prepare("UPDATE bookings SET status = 'cancelled', cancelled_by = ? WHERE id = ?").run(req.user.id, req.params.id);
+        res.json({ success: true, message: 'Reserva cancelada' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false });
+    }
+});
+
+router.put('/:id/confirm', authenticateToken, (req, res) => {
+    if (req.user.role !== 'sitter') return res.status(403).json({ success: false });
+    try {
+        const result = db.prepare("UPDATE bookings SET status = 'confirmed' WHERE id = ? AND sitter_id = ?").run(req.params.id, req.user.id);
+        if (result.changes === 0) return res.status(400).json({ success: false, message: 'No se pudo confirmar esta reserva' });
+        
+        // Also confirm the payment record if exists
+        db.prepare("UPDATE payments SET status = 'confirmed', admin_confirmed_at = ? WHERE booking_id = ?").run(new Date().toISOString(), req.params.id);
+        
+        res.json({ success: true, message: 'Pago confirmado por el cuidador' });
+    } catch (err) {
+        console.error(err);
         res.status(500).json({ success: false });
     }
 });

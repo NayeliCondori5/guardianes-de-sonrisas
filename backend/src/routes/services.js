@@ -7,20 +7,25 @@ const { v4: uuidv4 } = require('uuid');
 // GET /api/services -> List all approved services or filter by sitter_id / status
 router.get('/', (req, res) => {
     const { sitter_id, status } = req.query;
-    let query = `SELECT * FROM services WHERE 1=1`;
+    let query = `
+        SELECT s.*, u.full_name as sitter_name 
+        FROM services s
+        JOIN users u ON s.sitter_id = u.id
+        WHERE 1=1
+    `;
     const params = [];
 
     if (sitter_id) {
-        query += ` AND sitter_id = ?`;
+        query += ` AND s.sitter_id = ?`;
         params.push(sitter_id);
     }
     if (status) {
-        query += ` AND status = ?`;
+        query += ` AND s.status = ?`;
         params.push(status);
     } else {
         // By default, if not specified and not filtered by sitter, only return approved services
         if (!sitter_id) {
-            query += ` AND status = 'approved'`;
+            query += ` AND s.status = 'approved'`;
         }
     }
 

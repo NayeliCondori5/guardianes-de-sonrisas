@@ -4,6 +4,7 @@ import Navbar from '../../components/common/Navbar';
 import GlassCard from '../../components/common/GlassCard';
 import { User, Calendar, Star, Camera, Trash2, Edit, AlertTriangle, MapPin } from 'lucide-react';
 import CustomModal from '../../components/common/CustomModal';
+import api from '../../services/api';
 
 const ParentDashboard = () => {
     const { user, logout } = useAuth();
@@ -31,98 +32,127 @@ const ParentDashboard = () => {
         setProfileForm(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleDeleteAccount = () => {
-        const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        const updatedUsers = allUsers.filter(u => u.id?.toString() !== user.id?.toString());
-        localStorage.setItem('users', JSON.stringify(updatedUsers));
-        
-        setShowDeleteConfirm(false);
-        logout();
+    const handleDeleteAccount = async () => {
+        try {
+            await api.delete('/users/account');
+            setShowDeleteConfirm(false);
+            logout();
+        } catch(err) {
+            console.error(err);
+        }
+    };
+
+    const refreshData = async () => {
+        if (!user) return;
+        try {
+            // Fetch bookings from backend
+            const bookingsResponse = await api.get('/bookings/my');
+            if (bookingsResponse.data && bookingsResponse.data.success) {
+                const mappedBookings = bookingsResponse.data.data.map(b => {
+                    let status = b.status.toUpperCase();
+                    if (b.status === 'awaiting_payment' && b.payment_status === 'pending') {
+                        status = 'PAGADO';
+                    } else if (b.status === 'awaiting_payment') {
+                        status = 'ACEPTADA';
+                    } else if (b.status === 'confirmed') {
+                        status = 'CONFIRMADO';
+                    } else if (b.status === 'completed') {
+                        status = 'COMPLETADO';
+                    } else if (b.status === 'rejected') {
+                        status = 'RECHAZADA';
+                    } else if (b.status === 'cancelled') {
+                        status = 'CANCELADO';
+                    }
+                    
+                    return {
+                        id: b.id,
+                        parentId: b.parent_id,
+                        sitterId: b.sitter_id,
+                        sitterName: b.sitter_name || 'Cuidador',
+                        status: status,
+                        date: b.start_datetime ? b.start_datetime.split('T')[0] : '',
+                        hours: b.total_hours,
+                        total: b.total_amount,
+                        serviceTitle: b.message || 'Cuidado General',
+                        reviewed: !!b.reviewed
+                    };
+                });
+                setBookings(mappedBookings);
+            }
+
+            // Fetch profile from backend
+            const profileResponse = await api.get('/users/profile');
+            if (profileResponse.data && profileResponse.data.success) {
+                const dbUser = profileResponse.data.data;
+                setProfileForm({
+                    full_name: dbUser.full_name || '',
+                    city: dbUser.city || '',
+                    kids_count: dbUser.kids_count || '',
+                    kids_ages: dbUser.kids_ages || '',
+                    family_desc: dbUser.family_desc || '',
+                    needs: dbUser.needs || '',
+                    budget: dbUser.budget || '',
+                    payment_pref: dbUser.payment_pref || 'Transferencia / Depósito'
+                });
+            }
+        } catch (err) {
+            console.error('Error loading parent dashboard data:', err);
+        }
     };
 
     useEffect(() => {
-        const fetchBookings = () => {
-            const reqs = JSON.parse(localStorage.getItem('booking_requests') || '[]');
-            const myBookings = reqs.filter(r => r.parentId === (user?.id || 'parent1'));
-            setBookings(myBookings);
-        };
-        
-        if (user) {
-            fetchBookings();
-            
-            // Get the complete user from global localStorage 'users' to avoid losing fields
-            const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-            const dbUser = allUsers.find(u => u.id?.toString() === user.id?.toString()) || user;
-
-            setProfileForm({
-                full_name: dbUser.full_name || user.full_name || '',
-                city: dbUser.city || user.city || '',
-                kids_count: dbUser.kids_count || '',
-                kids_ages: dbUser.kids_ages || '',
-                family_desc: dbUser.family_desc || '',
-                needs: dbUser.needs || '',
-                budget: dbUser.budget || '',
-                payment_pref: dbUser.payment_pref || 'Transferencia / Depósito'
-            });
-        }
-        
-        window.addEventListener('storage', fetchBookings);
-        return () => window.removeEventListener('storage', fetchBookings);
+        refreshData();
     }, [user]);
 
-    const handlePay = (id) => {
-        const reqs = JSON.parse(localStorage.getItem('booking_requests') || '[]');
-        const updated = reqs.map(r => r.id === id ? { ...r, status: 'COMPLETADO' } : r);
-        localStorage.setItem('booking_requests', JSON.stringify(updated));
-        setBookings(updated.filter(r => r.parentId === (user?.id || 'parent1')));
-        setModal({
-            isOpen: true,
-            title: "Pago Exitoso",
-            message: "Tu pago ha sido procesado. El servicio ahora está marcado como completado.",
-            type: 'success'
-        });
+    const handlePay = async (id) => {
+        try {
+            await api.post(`/payments/${id}/upload-receipt`, {
+                method: 'deposit',
+                receipt_url: '/uploads/default-receipt.png'
+            });
+            refreshData();
+            setModal({
+                isOpen: true,
+                title: "Pago Exitoso",
+                message: "Tu pago ha sido registrado. El administrador verificará tu pago en breve.",
+                type: 'success'
+            });
+        } catch (err) {
+            console.error(err);
+        }
     };
 
-    const handleSubmitReview = (e) => {
+    const handleSubmitReview = async (e) => {
         if (e) e.preventDefault();
         if (!selectedBookingForReview) return;
 
-        const newReview = {
-            id: Date.now(),
-            parentId: user.id?.toString() || 'parent1',
-            parentName: user.full_name || 'Usuario',
-            parentAvatar: user.avatar || null,
-            sitterId: selectedBookingForReview.sitterId,
-            sitterName: selectedBookingForReview.sitterName,
-            serviceTitle: selectedBookingForReview.serviceTitle || 'Cuidado General',
-            rating: reviewForm.rating,
-            comment: reviewForm.comment,
-            date: new Date().toLocaleDateString('es-ES')
-        };
+        try {
+            await api.post('/reviews', {
+                booking_id: selectedBookingForReview.id,
+                rating: reviewForm.rating,
+                comment: reviewForm.comment
+            });
+            
+            setIsReviewModalOpen(false);
+            setReviewForm({ rating: 5, comment: '' });
+            setSelectedBookingForReview(null);
+            refreshData();
 
-        // Save review
-        const currentReviews = JSON.parse(localStorage.getItem('reviews') || '[]');
-        currentReviews.unshift(newReview);
-        localStorage.setItem('reviews', JSON.stringify(currentReviews));
-
-        // Update booking request in localStorage
-        const reqs = JSON.parse(localStorage.getItem('booking_requests') || '[]');
-        const updated = reqs.map(r => r.id === selectedBookingForReview.id ? { ...r, reviewed: true } : r);
-        localStorage.setItem('booking_requests', JSON.stringify(updated));
-        
-        // Update local state bookings
-        setBookings(updated.filter(r => r.parentId === (user?.id || 'parent1')));
-        
-        setIsReviewModalOpen(false);
-        setReviewForm({ rating: 5, comment: '' });
-        setSelectedBookingForReview(null);
-
-        setModal({
-            isOpen: true,
-            title: "¡Reseña Guardada!",
-            message: `Gracias por calificar el servicio de ${newReview.sitterName}. Tu opinión ayuda a nuestra comunidad.`,
-            type: 'success'
-        });
+            setModal({
+                isOpen: true,
+                title: "¡Reseña Guardada!",
+                message: `Gracias por calificar el servicio. Tu opinión ayuda a nuestra comunidad.`,
+                type: 'success'
+            });
+        } catch (err) {
+            console.error('Error sending review:', err);
+            setModal({
+                isOpen: true,
+                title: "Error",
+                message: "No se pudo registrar la reseña. Por favor intenta de nuevo.",
+                type: 'error'
+            });
+        }
     };
 
     const getStatusColor = (status) => {
@@ -151,23 +181,35 @@ const ParentDashboard = () => {
         }
     };
 
-    const handleAction = (id, newStatus) => {
-        const reqs = JSON.parse(localStorage.getItem('booking_requests') || '[]');
-        const updated = reqs.map(r => r.id === id ? { ...r, status: newStatus } : r);
-        localStorage.setItem('booking_requests', JSON.stringify(updated));
-        setBookings(updated.filter(r => r.parentId === (user?.id || 'parent1')));
-        window.dispatchEvent(new Event('storage'));
+    const handleAction = async (id, newStatus) => {
+        try {
+            if (newStatus === 'COMPLETADO') {
+                await api.put(`/bookings/${id}/complete`);
+            } else if (newStatus === 'CANCELADO') {
+                await api.put(`/bookings/${id}/cancel`);
+            }
+            refreshData();
+        } catch (err) {
+            console.error(err);
+        }
     };
 
-    const handleUploadReceipt = (id) => {
-        // Simulating receipt upload
-        handleAction(id, 'PAGADO');
-        setModal({
-            isOpen: true,
-            title: "Comprobante Subido",
-            message: "El cuidador verificará tu pago en breve. ¡Gracias!",
-            type: 'success'
-        });
+    const handleUploadReceipt = async (id) => {
+        try {
+            await api.post(`/payments/${id}/upload-receipt`, {
+                method: 'deposit',
+                receipt_url: '/uploads/default-receipt.png'
+            });
+            refreshData();
+            setModal({
+                isOpen: true,
+                title: "Comprobante Subido",
+                message: "El cuidador y el administrador verificarán tu pago en breve. ¡Gracias!",
+                type: 'success'
+            });
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     return (
@@ -412,30 +454,27 @@ const ParentDashboard = () => {
                                 )
                             ) : (
                                 <GlassCard className="rounded-[32px] p-8 shadow-md">
-                                    <form className="grid grid-cols-1 md:grid-cols-2 gap-6" onSubmit={(e) => {
+                                    <form className="grid grid-cols-1 md:grid-cols-2 gap-6" onSubmit={async (e) => {
                                         e.preventDefault();
-                                        const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-                                        const updatedData = { ...profileForm };
-                                        const updatedUsers = allUsers.map(u => {
-                                            if (u.id?.toString() === user.id?.toString()) {
-                                                return { ...u, ...updatedData };
-                                            }
-                                            return u;
-                                        });
-                                        localStorage.setItem('users', JSON.stringify(updatedUsers));
-                                        
-                                        // Update session
-                                        const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-                                        const finalUser = { ...currentUser, ...updatedData };
-                                        localStorage.setItem('user', JSON.stringify(finalUser));
-                                        
-                                        setIsEditingProfile(false);
-                                        setModal({
-                                            isOpen: true,
-                                            title: "Perfil Guardado",
-                                            message: "Los datos de tu familia se han actualizado correctamente.",
-                                            type: 'success'
-                                        });
+                                        try {
+                                            await api.put('/users/profile', {
+                                                ...profileForm
+                                            });
+                                            
+                                            // Update session
+                                            const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+                                            localStorage.setItem('user', JSON.stringify({ ...currentUser, ...profileForm }));
+                                            
+                                            setIsEditingProfile(false);
+                                            setModal({
+                                                isOpen: true,
+                                                title: "Perfil Guardado",
+                                                message: "Los datos de tu familia se han actualizado correctamente.",
+                                                type: 'success'
+                                            });
+                                        } catch (err) {
+                                            console.error('Error saving profile:', err);
+                                        }
                                     }}>
                                         <div className="md:col-span-2 flex items-center gap-6 mb-4">
                                             <div className="w-24 h-24 rounded-full bg-surface-dim border-2 border-primary flex items-center justify-center overflow-hidden">
