@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '../../components/common/Navbar';
 import GlassCard from '../../components/common/GlassCard';
-import { Users, BookOpen, DollarSign, Activity, Clock, Trash2, Edit, Plus, Search, X, AlertTriangle, Check, Briefcase, CheckCircle } from 'lucide-react';
+import { Users, BookOpen, DollarSign, Activity, Clock, Trash2, Edit, Plus, Search, X, AlertTriangle, Check, Briefcase, CheckCircle, ShieldCheck, ShieldOff } from 'lucide-react';
 import api from '../../services/api';
 
 const AdminDashboard = () => {
@@ -36,6 +36,7 @@ const AdminDashboard = () => {
     // Admin Tabs & Services state
     const [activeTab, setActiveTab] = useState('general');
     const [services, setServices] = useState([]);
+    const [allSitters, setAllSitters] = useState([]);
 
     const refreshServices = async () => {
         try {
@@ -49,6 +50,26 @@ const AdminDashboard = () => {
             }
         } catch (err) {
             console.error('Error fetching pending services:', err);
+        }
+    };
+
+    const refreshSitters = async () => {
+        try {
+            const response = await api.get('/admin/sitters');
+            if (response.data && response.data.success) {
+                setAllSitters(response.data.data);
+            }
+        } catch (err) {
+            console.error('Error fetching sitters:', err);
+        }
+    };
+
+    const handleVerifySitter = async (sitterId, newVerifiedState) => {
+        try {
+            await api.put(`/admin/sitters/${sitterId}/verify`, { is_verified: newVerifiedState });
+            refreshSitters();
+        } catch (err) {
+            console.error('Error updating sitter verification:', err);
         }
     };
 
@@ -81,6 +102,9 @@ const AdminDashboard = () => {
 
             // 3. Get pending services
             refreshServices();
+
+            // 4b. Get all sitters for verification tab
+            refreshSitters();
 
             // 4. Get stats
             const statsResponse = await api.get('/admin/stats');
@@ -211,6 +235,17 @@ const AdminDashboard = () => {
                         {services.filter(s => s.status === 'pending').length > 0 && (
                             <span className="px-2 py-0.5 bg-error text-white text-[10px] rounded-full">
                                 {services.filter(s => s.status === 'pending').length}
+                            </span>
+                        )}
+                    </button>
+                    <button 
+                        onClick={() => { setActiveTab('verify-sitters'); refreshSitters(); }} 
+                        className={`pb-3 font-bold text-sm transition-all px-4 flex items-center gap-1.5 ${activeTab === 'verify-sitters' ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-primary'}`}
+                    >
+                        <ShieldCheck size={15} /> Verificar Cuidadores
+                        {allSitters.filter(s => !s.is_verified).length > 0 && (
+                            <span className="px-2 py-0.5 bg-amber-500 text-white text-[10px] rounded-full">
+                                {allSitters.filter(s => !s.is_verified).length}
                             </span>
                         )}
                     </button>
@@ -470,6 +505,91 @@ const AdminDashboard = () => {
                     </GlassCard>
                 )}
 
+                {/* Verify Sitters Tab */}
+                {activeTab === 'verify-sitters' && (
+                    <GlassCard className="rounded-[32px] p-8 mb-10">
+                        <div className="mb-8">
+                            <h2 className="font-display-lg text-2xl font-bold flex items-center gap-2">
+                                <ShieldCheck className="text-primary"/> Verificación de Cuidadores
+                            </h2>
+                            <p className="text-on-surface-variant text-sm mt-1">
+                                Solo los cuidadores verificados pueden recibir solicitudes de contratación. Revisa y aprueba o revoca la verificación de cada cuidador.
+                            </p>
+                        </div>
+
+                        {allSitters.length === 0 ? (
+                            <div className="text-center py-12">
+                                <p className="text-on-surface-variant">No hay cuidadores registrados.</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="border-b border-outline-variant/30 text-xs font-bold text-outline uppercase tracking-wider">
+                                            <th className="p-4">Cuidador</th>
+                                            <th className="p-4">Ciudad</th>
+                                            <th className="p-4">Tarifa</th>
+                                            <th className="p-4">Exp.</th>
+                                            <th className="p-4 text-center">Estado</th>
+                                            <th className="p-4 text-center">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {allSitters.map((s) => (
+                                            <tr key={s.id} className="border-b border-outline-variant/10 hover:bg-primary/5 transition-colors">
+                                                <td className="p-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center text-secondary font-bold text-sm overflow-hidden">
+                                                            {s.avatar_url 
+                                                                ? <img src={s.avatar_url} alt={s.full_name} className="w-full h-full object-cover" />
+                                                                : s.full_name?.charAt(0)
+                                                            }
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold text-on-surface">{s.full_name}</p>
+                                                            <p className="text-xs text-on-surface-variant">{s.email}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-sm text-on-surface-variant">{s.city || '---'}</td>
+                                                <td className="p-4 text-sm font-bold text-primary">Bs. {s.hourly_rate || '---'}/hr</td>
+                                                <td className="p-4 text-sm text-on-surface-variant">{s.experience_years ? `${s.experience_years} años` : '---'}</td>
+                                                <td className="p-4 text-center">
+                                                    {s.is_verified ? (
+                                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-secondary-container text-on-secondary-container">
+                                                            <ShieldCheck size={12} /> Verificado
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
+                                                            <ShieldOff size={12} /> Sin verificar
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    {s.is_verified ? (
+                                                        <button
+                                                            onClick={() => handleVerifySitter(s.id, false)}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-error-container text-on-error-container rounded-full text-xs font-bold hover:bg-error hover:text-white transition active:scale-95"
+                                                        >
+                                                            <ShieldOff size={13} /> Revocar
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleVerifySitter(s.id, true)}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-full text-xs font-bold hover:bg-primary-container transition active:scale-95 shadow-sm"
+                                                        >
+                                                            <ShieldCheck size={13} /> Verificar
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </GlassCard>
+                )}
 
             </div>
 
