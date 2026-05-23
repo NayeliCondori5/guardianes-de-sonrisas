@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import GlassCard from '../components/common/GlassCard';
 import { useAuth } from '../context/AuthContext';
-import { MapPin, Star, ShieldCheck, Heart, Car, Home, Cigarette, BookOpen, Briefcase, X } from 'lucide-react';
+import { MapPin, Star, ShieldCheck, ShieldOff, Heart, Car, Home, Cigarette, BookOpen, Briefcase, X } from 'lucide-react';
 import CustomModal from '../components/common/CustomModal';
 import api from '../services/api';
 
@@ -143,10 +143,11 @@ const SitterProfile = () => {
             });
         } catch (err) {
             console.error('Error submitting booking request:', err);
+            const serverMessage = err.response?.data?.message;
             setModal({
                 isOpen: true,
                 title: "Error",
-                message: "No se pudo registrar la solicitud. Por favor intenta de nuevo.",
+                message: serverMessage || "No se pudo registrar la solicitud. Por favor intenta de nuevo.",
                 type: 'error'
             });
         }
@@ -195,9 +196,20 @@ const SitterProfile = () => {
                             </div>
                         </div>
 
-                        <button onClick={handleRequest} className="w-full mt-8 bg-primary text-white py-4 rounded-full font-bold shadow-lg hover:bg-primary-container transition active:scale-95 text-lg">
-                            SOLICITAR NIÑERA
-                        </button>
+                        {sitter.verified ? (
+                            <button onClick={handleRequest} className="w-full mt-8 bg-primary text-white py-4 rounded-full font-bold shadow-lg hover:bg-primary-container transition active:scale-95 text-lg">
+                                SOLICITAR NIÑERA
+                            </button>
+                        ) : (
+                            <div className="mt-8">
+                                <button disabled className="w-full bg-surface-container-highest text-on-surface-variant py-4 rounded-full font-bold shadow-sm text-lg cursor-not-allowed">
+                                    SOLICITAR NIÑERA
+                                </button>
+                                <p className="text-xs text-error font-bold mt-2 text-center flex items-center justify-center gap-1">
+                                    <ShieldOff size={14} /> Cuidador aún no verificado
+                                </p>
+                            </div>
+                        )}
                         <p className="text-xs text-on-surface-variant mt-4">Activa: {sitter.lastActive}</p>
                     </GlassCard>
 
@@ -245,23 +257,29 @@ const SitterProfile = () => {
                                             <div className="font-bold text-primary text-base">
                                                 Bs. {service.rate} <span className="text-xs text-on-surface-variant font-normal">/ hr</span>
                                             </div>
-                                            <button 
-                                                onClick={() => {
-                                                    if (!user) {
-                                                        handleRequest();
-                                                        return;
-                                                    }
-                                                    setBookingForm({
-                                                        date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-                                                        hours: 4,
-                                                        selectedServiceId: service.id
-                                                    });
-                                                    setIsBookingModalOpen(true);
-                                                }}
-                                                className="px-3 py-1.5 bg-primary text-white rounded-full text-xs font-bold hover:bg-primary-container transition active:scale-95 shadow-sm"
-                                            >
-                                                Reservar
-                                            </button>
+                                            {sitter.verified ? (
+                                                <button 
+                                                    onClick={() => {
+                                                        if (!user) {
+                                                            handleRequest();
+                                                            return;
+                                                        }
+                                                        setBookingForm({
+                                                            date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+                                                            hours: 4,
+                                                            selectedServiceId: service.id
+                                                        });
+                                                        setIsBookingModalOpen(true);
+                                                    }}
+                                                    className="px-3 py-1.5 bg-primary text-white rounded-full text-xs font-bold hover:bg-primary-container transition active:scale-95 shadow-sm"
+                                                >
+                                                    Reservar
+                                                </button>
+                                            ) : (
+                                                <button disabled className="px-3 py-1.5 bg-surface-container-highest text-on-surface-variant rounded-full text-xs font-bold cursor-not-allowed shadow-sm">
+                                                    No Verificado
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 ))}

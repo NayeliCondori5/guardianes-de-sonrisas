@@ -194,4 +194,45 @@ router.get('/site-config', authenticateToken, (req, res) => {
     }
 });
 
+// GET /admin/sitters -> List all sitters with verification status
+router.get('/sitters', authenticateToken, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ success: false });
+    try {
+        const sitters = db.prepare(`
+            SELECT u.id, u.full_name, u.email, u.city, u.avatar_url, u.created_at,
+                   s.is_verified, s.hourly_rate, s.experience_years, s.rating, s.description
+            FROM users u
+            JOIN sitters s ON u.id = s.user_id
+            WHERE u.role = 'sitter' AND u.is_active = 1
+            ORDER BY s.is_verified ASC, u.created_at DESC
+        `).all();
+        res.json({ success: true, data: sitters });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Error interno' });
+    }
+});
+
+// PUT /admin/sitters/:id/verify -> Verify or unverify a sitter
+router.put('/sitters/:id/verify', authenticateToken, (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ success: false });
+    const { is_verified } = req.body;
+    try {
+        const sitter = db.prepare('SELECT user_id FROM sitters WHERE user_id = ?').get(req.params.id);
+        if (!sitter) return res.status(404).json({ success: false, message: 'Cuidador no encontrado' });
+
+        db.prepare(`
+            UPDATE sitters SET is_verified = ?, verified_by = ?, verified_at = ? WHERE user_id = ?
+        `).run(is_verified ? 1 : 0, req.user.id, new Date().toISOString(), req.params.id);
+
+        res.json({
+            success: true,
+            message: is_verified ? 'Cuidador verificado exitosamente' : 'Verificación removida'
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Error interno' });
+    }
+});
+
 module.exports = router;
