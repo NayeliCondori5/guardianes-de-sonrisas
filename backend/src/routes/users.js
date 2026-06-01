@@ -64,6 +64,24 @@ router.get('/profile', authenticateToken, async (req, res) => {
     }
 });
 
+// GET /api/users/parent/:id -> perfil público de un padre (usado por niñeras para ver info)
+router.get('/parent/:id', authenticateToken, async (req, res) => {
+    try {
+        const { rows: userRows } = await db.query('SELECT id, full_name, city, avatar_url FROM users WHERE id = $1 AND role = $2', [req.params.id, 'parent']);
+        const user = userRows.length > 0 ? userRows[0] : null;
+        if (!user) return res.status(404).json({ success: false, message: 'Padre no encontrado' });
+
+        const { rows: parentRows } = await db.query('SELECT children_ages as kids_ages, kids_count, family_desc, needs, budget, payment_pref FROM parents WHERE user_id = $1', [user.id]);
+        const parentInfo = parentRows.length > 0 ? parentRows[0] : {};
+
+        res.json({ success: true, data: { ...user, avatar: user.avatar_url, ...parentInfo } });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Error interno' });
+    }
+});
+
+
 // POST /api/users/avatar -> upload avatar image to Cloudinary
 const upload = require('../middleware/upload');
 router.post('/avatar', authenticateToken, upload.single('avatar'), async (req, res) => {

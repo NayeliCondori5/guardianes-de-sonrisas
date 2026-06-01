@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../components/common/Navbar';
 import GlassCard from '../components/common/GlassCard';
 import { User, MapPin, Baby, Heart, DollarSign, ArrowLeft } from 'lucide-react';
+import api from '../services/api';
 
 const ParentProfile = () => {
     const { id } = useParams();
@@ -10,36 +11,25 @@ const ParentProfile = () => {
     const [parent, setParent] = useState(null);
 
     useEffect(() => {
-        const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        const currentSession = JSON.parse(localStorage.getItem('user') || '{}');
-        
-        console.log("DEBUG - Buscando ID:", id);
-        console.log("DEBUG - Todos los usuarios en LocalStorage:", allUsers);
-        console.log("DEBUG - Sesión actual:", currentSession);
-
-        // Try multiple matching strategies
-        let found = allUsers.find(u => u.id?.toString() === id?.toString());
-        
-        if (!found && currentSession.id?.toString() === id?.toString()) {
-            found = currentSession;
-        }
-
-        // Final fallback: search by name if ID fails (for old/mock data)
-        if (!found) {
-            const reqs = JSON.parse(localStorage.getItem('booking_requests') || '[]');
-            const thisReq = reqs.find(r => r.id?.toString() === id?.toString() || r.parentId?.toString() === id?.toString());
-            if (thisReq) {
-                found = allUsers.find(u => u.full_name === thisReq.parentName);
+        const fetchParent = async () => {
+            try {
+                // Si el ID es igual al del usuario en sesión, intentamos cargar el perfil propio para asegurar los datos recientes
+                const currentSession = JSON.parse(localStorage.getItem('user') || '{}');
+                
+                // Hacemos el llamado a la API real
+                const response = await api.get(`/users/parent/${id}`);
+                if (response.data && response.data.success) {
+                    setParent(response.data.data);
+                } else {
+                    setParent({ error: true });
+                }
+            } catch (err) {
+                console.error("Error fetching parent profile:", err);
+                setParent({ error: true });
             }
-        }
-        
-        if (found) {
-            console.log("DEBUG - Usuario encontrado:", found);
-            setParent(found);
-        } else {
-            console.error("DEBUG - Usuario NO encontrado para el ID:", id);
-            setParent({ error: true });
-        }
+        };
+
+        fetchParent();
     }, [id]);
 
     if (!parent) return (

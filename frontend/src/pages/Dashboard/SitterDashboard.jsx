@@ -105,7 +105,7 @@ const SitterDashboard = () => {
                     let status = b.status.toUpperCase();
                     if (b.status === 'awaiting_payment' && b.payment_status === 'pending') {
                         status = 'PAGADO';
-                    } else if (b.status === 'awaiting_payment') {
+                    } else if (b.status === 'awaiting_payment' || b.status === 'accepted') {
                         status = 'ACEPTADA';
                     } else if (b.status === 'confirmed') {
                         status = 'CONFIRMADO';
@@ -115,6 +115,8 @@ const SitterDashboard = () => {
                         status = 'RECHAZADA';
                     } else if (b.status === 'cancelled') {
                         status = 'CANCELADO';
+                    } else if (b.status === 'pending') {
+                        status = 'PENDIENTE';
                     }
                     
                     return {
