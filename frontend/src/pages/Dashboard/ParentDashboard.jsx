@@ -234,30 +234,38 @@ const ParentDashboard = () => {
                                         type="file" 
                                         className="hidden" 
                                         accept="image/*" 
-                                        onChange={(e) => {
+                                        onChange={async (e) => {
                                             const file = e.target.files[0];
                                             if (file) {
-                                                const reader = new FileReader();
-                                                reader.onloadend = () => {
-                                                    const base64 = reader.result;
-                                                    
-                                                    // Update users list
-                                                    const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
-                                                    const updatedUsers = allUsers.map(u => u.id === user.id ? { ...u, avatar: base64 } : u);
-                                                    localStorage.setItem('users', JSON.stringify(updatedUsers));
-                                                    
-                                                    // Update current session user
-                                                    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-                                                    localStorage.setItem('user', JSON.stringify({ ...currentUser, avatar: base64 }));
-                                                    
+                                                const formData = new FormData();
+                                                formData.append('avatar', file);
+                                                try {
+                                                    const response = await api.post('/users/avatar', formData, {
+                                                        headers: { 'Content-Type': 'multipart/form-data' }
+                                                    });
+                                                    if (response.data && response.data.success) {
+                                                        const avatarUrl = response.data.avatar_url;
+                                                        
+                                                        // Update current session user
+                                                        const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+                                                        localStorage.setItem('user', JSON.stringify({ ...currentUser, avatar: avatarUrl }));
+                                                        
+                                                        setModal({
+                                                            isOpen: true,
+                                                            title: "Foto Actualizada",
+                                                            message: "Tu foto de perfil familiar ha sido guardada correctamente.",
+                                                            type: 'success'
+                                                        });
+                                                    }
+                                                } catch (err) {
+                                                    console.error('Error uploading image:', err);
                                                     setModal({
                                                         isOpen: true,
-                                                        title: "Foto Actualizada",
-                                                        message: "Tu foto de perfil familiar ha sido guardada correctamente.",
-                                                        type: 'success'
+                                                        title: "Error",
+                                                        message: "No se pudo subir la imagen. Intenta con una imagen más pequeña.",
+                                                        type: 'error'
                                                     });
-                                                };
-                                                reader.readAsDataURL(file);
+                                                }
                                             }
                                         }} 
                                     />

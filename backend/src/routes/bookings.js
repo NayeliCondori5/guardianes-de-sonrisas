@@ -4,16 +4,18 @@ const db = require('../database/db');
 const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 
-router.post('/', authenticateToken, (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
     if (req.user.role !== 'parent') return res.status(403).json({ success: false, message: 'Solo los padres pueden crear contrataciones' });
     const { sitter_id, start_datetime, end_datetime, total_hours, message } = req.body;
 
     try {
-        const sitter = db.prepare('SELECT hourly_rate, is_verified FROM sitters WHERE user_id = ?').get(sitter_id);
+        const { rows: sitterRows } = await db.query('SELECT hourly_rate, is_verified FROM sitters WHERE user_id = $1', [sitter_id]);
+        const sitter = sitterRows.length > 0 ? sitterRows[0] : null;
         if (!sitter) return res.status(404).json({ success: false, message: 'Cuidador no encontrado' });
         if (!sitter.is_verified) return res.status(400).json({ success: false, message: 'El cuidador no está verificado' });
 
-        const feeConfig = db.prepare('SELECT value FROM site_config WHERE key = "platform_fee_percent"').get();
+        const { rows: configRows } = await db.query("SELECT value FROM site_config WHERE key = 'platform_fee_percent'");
+        const feeConfig = configRows.length > 0 ? configRows[0] : null;
         const feePercent = feeConfig ? parseFloat(feeConfig.value) : 10;
         
         const subtotal = total_hours * sitter.hourly_rate;
@@ -21,18 +23,19 @@ router.post('/', authenticateToken, (req, res) => {
         const total_amount = subtotal + platform_fee;
 
         const id = uuidv4();
-        db.prepare(`
+        await db.query(`
             INSERT INTO bookings (id, parent_id, sitter_id, start_datetime, end_datetime, total_hours, hourly_rate, subtotal, platform_fee, total_amount, message, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(id, req.user.id, sitter_id, start_datetime, end_datetime, total_hours, sitter.hourly_rate, subtotal, platform_fee, total_amount, message, new Date().toISOString());
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        `, [id, req.user.id, sitter_id, start_datetime, end_datetime, total_hours, sitter.hourly_rate, subtotal, platform_fee, total_amount, message, new Date().toISOString()]);
 
         res.json({ success: true, data: { id, total_amount }, message: 'Contratación solicitada con éxito' });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ success: false, message: 'Error interno' });
     }
 });
 
-router.get('/my', authenticateToken, (req, res) => {
+router.get('/my', authenticateToken, async (req, res) => {
     try {
         let query;
         if (req.user.role === 'parent') {
@@ -42,7 +45,7 @@ router.get('/my', authenticateToken, (req, res) => {
                 FROM bookings b 
                 JOIN users u ON b.sitter_id = u.id 
                 LEFT JOIN payments p ON b.id = p.booking_id
-                WHERE b.parent_id = ? 
+                WHERE b.parent_id = $1 
                 ORDER BY b.created_at DESC
             `;
         } else if (req.user.role === 'sitter') {
@@ -52,62 +55,68 @@ router.get('/my', authenticateToken, (req, res) => {
                 FROM bookings b 
                 JOIN users u ON b.parent_id = u.id 
                 LEFT JOIN payments p ON b.id = p.booking_id
-                WHERE b.sitter_id = ? 
+                WHERE b.sitter_id = $1 
                 ORDER BY b.created_at DESC
             `;
         } else {
             return res.status(403).json({ success: false });
         }
-        const bookings = db.prepare(query).all(req.user.id);
+        
+        const { rows: bookings } = await db.query(query, [req.user.id]);
         
         // Map reviewed boolean
         const mappedBookings = bookings.map(b => ({
             ...b,
-            reviewed: b.review_count > 0
+            reviewed: parseInt(b.review_count, 10) > 0
         }));
         
         res.json({ success: true, data: mappedBookings });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ success: false, message: 'Error interno' });
     }
 });
 
-router.put('/:id/accept', authenticateToken, (req, res) => {
+router.put('/:id/accept', authenticateToken, async (req, res) => {
     if (req.user.role !== 'sitter') return res.status(403).json({ success: false });
     try {
-        const result = db.prepare(`UPDATE bookings SET status = 'awaiting_payment' WHERE id = ? AND sitter_id = ? AND status = 'pending'`).run(req.params.id, req.user.id);
-        if (result.changes === 0) return res.status(400).json({ success: false, message: 'No se puede aceptar esta reserva' });
+        const result = await db.query(`UPDATE bookings SET status = 'awaiting_payment' WHERE id = $1 AND sitter_id = $2 AND status = 'pending'`, [req.params.id, req.user.id]);
+        if (result.rowCount === 0) return res.status(400).json({ success: false, message: 'No se puede aceptar esta reserva' });
         res.json({ success: true, message: 'Reserva aceptada. Esperando pago del padre.' });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ success: false });
     }
 });
 
-router.put('/:id/reject', authenticateToken, (req, res) => {
+router.put('/:id/reject', authenticateToken, async (req, res) => {
     if (req.user.role !== 'sitter') return res.status(403).json({ success: false });
     try {
-        db.prepare(`UPDATE bookings SET status = 'rejected', cancelled_reason = ?, cancelled_by = ? WHERE id = ? AND sitter_id = ? AND status = 'pending'`)
-          .run(req.body.reason, req.user.id, req.params.id, req.user.id);
+        await db.query(`UPDATE bookings SET status = 'rejected', cancelled_reason = $1, cancelled_by = $2 WHERE id = $3 AND sitter_id = $4 AND status = 'pending'`,
+          [req.body.reason, req.user.id, req.params.id, req.user.id]);
         res.json({ success: true, message: 'Reserva rechazada' });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ success: false });
     }
 });
 
-router.put('/:id/complete', authenticateToken, (req, res) => {
+router.put('/:id/complete', authenticateToken, async (req, res) => {
     if (req.user.role !== 'parent') return res.status(403).json({ success: false });
     try {
-        const result = db.prepare(`UPDATE bookings SET status = 'completed' WHERE id = ? AND parent_id = ? AND status = 'confirmed'`).run(req.params.id, req.user.id);
-        if (result.changes === 0) return res.status(400).json({ success: false, message: 'No se puede completar esta reserva' });
+        const result = await db.query(`UPDATE bookings SET status = 'completed' WHERE id = $1 AND parent_id = $2 AND status = 'confirmed'`, [req.params.id, req.user.id]);
+        if (result.rowCount === 0) return res.status(400).json({ success: false, message: 'No se puede completar esta reserva' });
         res.json({ success: true, message: 'Reserva marcada como completada' });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ success: false });
     }
 });
 
-router.put('/:id/cancel', authenticateToken, (req, res) => {
+router.put('/:id/cancel', authenticateToken, async (req, res) => {
     try {
-        const booking = db.prepare('SELECT parent_id, sitter_id FROM bookings WHERE id = ?').get(req.params.id);
+        const { rows } = await db.query('SELECT parent_id, sitter_id FROM bookings WHERE id = $1', [req.params.id]);
+        const booking = rows.length > 0 ? rows[0] : null;
         if (!booking) return res.status(404).json({ success: false, message: 'Reserva no encontrada' });
         
         // Either parent or sitter can cancel
@@ -115,7 +124,7 @@ router.put('/:id/cancel', authenticateToken, (req, res) => {
             return res.status(403).json({ success: false, message: 'No autorizado' });
         }
         
-        db.prepare("UPDATE bookings SET status = 'cancelled', cancelled_by = ? WHERE id = ?").run(req.user.id, req.params.id);
+        await db.query("UPDATE bookings SET status = 'cancelled', cancelled_by = $1 WHERE id = $2", [req.user.id, req.params.id]);
         res.json({ success: true, message: 'Reserva cancelada' });
     } catch (err) {
         console.error(err);
@@ -123,19 +132,21 @@ router.put('/:id/cancel', authenticateToken, (req, res) => {
     }
 });
 
-router.put('/:id/confirm', authenticateToken, (req, res) => {
+router.put('/:id/confirm', authenticateToken, async (req, res) => {
     if (req.user.role !== 'sitter') return res.status(403).json({ success: false });
     try {
-        const result = db.prepare("UPDATE bookings SET status = 'confirmed' WHERE id = ? AND sitter_id = ?").run(req.params.id, req.user.id);
-        if (result.changes === 0) return res.status(400).json({ success: false, message: 'No se pudo confirmar esta reserva' });
-        
-        // Also confirm the payment record if exists
-        db.prepare("UPDATE payments SET status = 'confirmed', admin_confirmed_at = ? WHERE booking_id = ?").run(new Date().toISOString(), req.params.id);
+        await db.transaction(async (client) => {
+            const result = await client.query("UPDATE bookings SET status = 'confirmed' WHERE id = $1 AND sitter_id = $2", [req.params.id, req.user.id]);
+            if (result.rowCount === 0) throw new Error('No se pudo confirmar esta reserva');
+            
+            // Also confirm the payment record if exists
+            await client.query("UPDATE payments SET status = 'confirmed', admin_confirmed_at = $1 WHERE booking_id = $2", [new Date().toISOString(), req.params.id]);
+        });
         
         res.json({ success: true, message: 'Pago confirmado por el cuidador' });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ success: false });
+        res.status(500).json({ success: false, message: err.message || 'Error interno' });
     }
 });
 

@@ -5,7 +5,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 
 // GET /api/services -> List all approved services or filter by sitter_id / status
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     const { sitter_id, status } = req.query;
     let query = `
         SELECT s.*, u.full_name as sitter_name 
@@ -16,12 +16,12 @@ router.get('/', (req, res) => {
     const params = [];
 
     if (sitter_id) {
-        query += ` AND s.sitter_id = ?`;
         params.push(sitter_id);
+        query += ` AND s.sitter_id = $${params.length}`;
     }
     if (status) {
-        query += ` AND s.status = ?`;
         params.push(status);
+        query += ` AND s.status = $${params.length}`;
     } else {
         // By default, if not specified and not filtered by sitter, only return approved services
         if (!sitter_id) {
@@ -30,7 +30,7 @@ router.get('/', (req, res) => {
     }
 
     try {
-        const services = db.prepare(query).all(...params);
+        const { rows: services } = await db.query(query, params);
         res.json({ success: true, data: services });
     } catch (err) {
         console.error(err);
@@ -39,7 +39,7 @@ router.get('/', (req, res) => {
 });
 
 // POST /api/services -> Create a new service (Caregivers only)
-router.post('/', authenticateToken, (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
     if (req.user.role !== 'sitter') {
         return res.status(403).json({ success: false, message: 'Solo los cuidadores pueden registrar servicios' });
     }
@@ -53,10 +53,10 @@ router.post('/', authenticateToken, (req, res) => {
     const now = new Date().toISOString();
 
     try {
-        db.prepare(`
+        await db.query(`
             INSERT INTO services (id, sitter_id, title, description, category, hourly_rate, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-        `).run(id, req.user.id, title, description, category, Number(hourly_rate), now, now);
+            VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8)
+        `, [id, req.user.id, title, description, category, Number(hourly_rate), now, now]);
 
         res.status(201).json({
             success: true,
@@ -70,7 +70,7 @@ router.post('/', authenticateToken, (req, res) => {
 });
 
 // PUT /api/services/:id -> Update a service (Caregiver owner only)
-router.put('/:id', authenticateToken, (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
     if (req.user.role !== 'sitter') {
         return res.status(403).json({ success: false, message: 'Solo los cuidadores pueden editar servicios' });
     }
@@ -81,7 +81,8 @@ router.put('/:id', authenticateToken, (req, res) => {
     }
 
     try {
-        const service = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id);
+        const { rows } = await db.query('SELECT * FROM services WHERE id = $1', [req.params.id]);
+        const service = rows.length > 0 ? rows[0] : null;
         if (!service) {
             return res.status(404).json({ success: false, message: 'Servicio no encontrado' });
         }
@@ -92,11 +93,11 @@ router.put('/:id', authenticateToken, (req, res) => {
         const now = new Date().toISOString();
 
         // HU-02: Any critical edit returns the product/service state to "pending"
-        db.prepare(`
+        await db.query(`
             UPDATE services 
-            SET title = ?, description = ?, category = ?, hourly_rate = ?, status = 'pending', updated_at = ?
-            WHERE id = ?
-        `).run(title, description, category, Number(hourly_rate), now, req.params.id);
+            SET title = $1, description = $2, category = $3, hourly_rate = $4, status = 'pending', updated_at = $5
+            WHERE id = $6
+        `, [title, description, category, Number(hourly_rate), now, req.params.id]);
 
         res.json({
             success: true,
@@ -110,13 +111,14 @@ router.put('/:id', authenticateToken, (req, res) => {
 });
 
 // DELETE /api/services/:id -> Delete a service (Caregiver owner only)
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
     if (req.user.role !== 'sitter') {
         return res.status(403).json({ success: false, message: 'Solo los cuidadores pueden eliminar servicios' });
     }
 
     try {
-        const service = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id);
+        const { rows } = await db.query('SELECT * FROM services WHERE id = $1', [req.params.id]);
+        const service = rows.length > 0 ? rows[0] : null;
         if (!service) {
             return res.status(404).json({ success: false, message: 'Servicio no encontrado' });
         }
@@ -124,7 +126,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
             return res.status(403).json({ success: false, message: 'No estás autorizado para eliminar este servicio' });
         }
 
-        db.prepare('DELETE FROM services WHERE id = ?').run(req.params.id);
+        await db.query('DELETE FROM services WHERE id = $1', [req.params.id]);
         res.json({ success: true, message: 'Servicio eliminado permanentemente de la plataforma' });
     } catch (err) {
         console.error(err);
@@ -133,7 +135,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 // PUT /api/services/:id/validate -> Validate a service (Admin only)
-router.put('/:id/validate', authenticateToken, (req, res) => {
+router.put('/:id/validate', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') {
         return res.status(403).json({ success: false, message: 'Solo administradores pueden realizar esta acción' });
     }
@@ -144,13 +146,14 @@ router.put('/:id/validate', authenticateToken, (req, res) => {
     }
 
     try {
-        const service = db.prepare('SELECT * FROM services WHERE id = ?').get(req.params.id);
+        const { rows } = await db.query('SELECT * FROM services WHERE id = $1', [req.params.id]);
+        const service = rows.length > 0 ? rows[0] : null;
         if (!service) {
             return res.status(404).json({ success: false, message: 'Servicio no encontrado' });
         }
 
         const now = new Date().toISOString();
-        db.prepare('UPDATE services SET status = ?, updated_at = ? WHERE id = ?').run(status, now, req.params.id);
+        await db.query('UPDATE services SET status = $1, updated_at = $2 WHERE id = $3', [status, now, req.params.id]);
 
         res.json({
             success: true,

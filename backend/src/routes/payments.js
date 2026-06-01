@@ -5,9 +5,9 @@ const { authenticateToken } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const { v4: uuidv4 } = require('uuid');
 
-router.get('/info', (req, res) => {
+router.get('/info', async (req, res) => {
     try {
-        const info = db.prepare('SELECT key, value FROM site_config WHERE key IN ("company_bank_account", "company_qr_image_url")').all();
+        const { rows: info } = await db.query("SELECT key, value FROM site_config WHERE key IN ('company_bank_account', 'company_qr_image_url')");
         const data = {};
         info.forEach(i => data[i.key] = i.value);
         res.json({ success: true, data });
@@ -16,26 +16,28 @@ router.get('/info', (req, res) => {
     }
 });
 
-router.post('/:bookingId/upload-receipt', authenticateToken, upload.single('receipt'), (req, res) => {
+router.post('/:bookingId/upload-receipt', authenticateToken, upload.single('receipt'), async (req, res) => {
     if (req.user.role !== 'parent') return res.status(403).json({ success: false, message: 'Solo padres' });
 
     try {
-        const booking = db.prepare('SELECT * FROM bookings WHERE id = ? AND parent_id = ?').get(req.params.bookingId, req.user.id);
+        const { rows: bookingRows } = await db.query('SELECT * FROM bookings WHERE id = $1 AND parent_id = $2', [req.params.bookingId, req.user.id]);
+        const booking = bookingRows.length > 0 ? bookingRows[0] : null;
         if (!booking) return res.status(400).json({ success: false, message: 'Reserva no encontrada o no pertenece a este usuario' });
 
-        const receiptUrl = req.file ? `/uploads/${req.file.filename}` : (req.body.receipt_url || '/uploads/default-receipt.png');
+        // Cloudinary returns the full URL in req.file.path
+        const receiptUrl = req.file ? req.file.path : (req.body.receipt_url || '/uploads/default-receipt.png');
         
-        db.transaction(() => {
-            const existing = db.prepare('SELECT id FROM payments WHERE booking_id = ?').get(booking.id);
-            if (existing) {
-                db.prepare('UPDATE payments SET receipt_url = ?, status = "pending" WHERE booking_id = ?').run(receiptUrl, booking.id);
+        await db.transaction(async (client) => {
+            const { rows: existingRows } = await client.query('SELECT id FROM payments WHERE booking_id = $1', [booking.id]);
+            if (existingRows.length > 0) {
+                await client.query('UPDATE payments SET receipt_url = $1, status = $2 WHERE booking_id = $3', [receiptUrl, 'pending', booking.id]);
             } else {
-                db.prepare(`
+                await client.query(`
                     INSERT INTO payments (id, booking_id, amount, method, receipt_url, status)
-                    VALUES (?, ?, ?, ?, ?, 'pending')
-                `).run(uuidv4(), booking.id, booking.total_amount, req.body.method || 'deposit', receiptUrl);
+                    VALUES ($1, $2, $3, $4, $5, 'pending')
+                `, [uuidv4(), booking.id, booking.total_amount, req.body.method || 'deposit', receiptUrl]);
             }
-        })();
+        });
 
         res.json({ success: true, message: 'Comprobante subido. Esperando confirmación de un administrador.' });
     } catch (err) {

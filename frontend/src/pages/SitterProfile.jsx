@@ -31,7 +31,7 @@ const SitterProfile = () => {
                     
                     const avgRating = data.reviews && data.reviews.length > 0
                         ? (data.reviews.reduce((sum, r) => sum + Number(r.rating || 0), 0) / data.reviews.length).toFixed(1)
-                        : (data.rating || 5.0).toFixed(1);
+                        : (data.rating || 0).toFixed(1);
 
                     setSitter({
                         ...data,
@@ -127,7 +127,7 @@ const SitterProfile = () => {
             const end = `${bookingForm.date}T13:00:00`;
 
             await api.post('/bookings', {
-                sitter_id: sitter.id,
+                sitter_id: id,
                 start_datetime: start,
                 end_datetime: end,
                 total_hours: bookingForm.hours,

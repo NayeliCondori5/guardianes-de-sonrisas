@@ -6,7 +6,7 @@ const upload = require('../middleware/upload');
 const { v4: uuidv4 } = require('uuid');
 
 // GET /api/sitters -> buscar
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     const { city, min_price, max_price, min_exp, min_rating, page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
 
@@ -18,17 +18,32 @@ router.get('/', (req, res) => {
     `;
     const params = [];
 
-    if (city) { query += ` AND u.city LIKE ?`; params.push(`%${city}%`); }
-    if (min_price) { query += ` AND s.hourly_rate >= ?`; params.push(min_price); }
-    if (max_price) { query += ` AND s.hourly_rate <= ?`; params.push(max_price); }
-    if (min_exp) { query += ` AND s.experience_years >= ?`; params.push(min_exp); }
-    if (min_rating) { query += ` AND s.rating >= ?`; params.push(min_rating); }
+    if (city) { 
+        params.push(`%${city}%`); 
+        query += ` AND u.city ILIKE $${params.length}`; 
+    }
+    if (min_price) { 
+        params.push(min_price); 
+        query += ` AND s.hourly_rate >= $${params.length}`; 
+    }
+    if (max_price) { 
+        params.push(max_price); 
+        query += ` AND s.hourly_rate <= $${params.length}`; 
+    }
+    if (min_exp) { 
+        params.push(min_exp); 
+        query += ` AND s.experience_years >= $${params.length}`; 
+    }
+    if (min_rating) { 
+        params.push(min_rating); 
+        query += ` AND s.rating >= $${params.length}`; 
+    }
 
-    query += ` ORDER BY s.rating DESC LIMIT ? OFFSET ?`;
     params.push(limit, offset);
+    query += ` ORDER BY s.rating DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
 
     try {
-        const sitters = db.prepare(query).all(...params);
+        const { rows: sitters } = await db.query(query, params);
         
         // Parse JSON fields for each sitter
         const mappedSitters = sitters.map(s => {
@@ -69,16 +84,16 @@ router.get('/', (req, res) => {
 });
 
 // GET /api/sitters/featured
-router.get('/featured', (req, res) => {
+router.get('/featured', async (req, res) => {
     try {
         const now = new Date().toISOString();
-        const featured = db.prepare(`
+        const { rows: featured } = await db.query(`
             SELECT u.id, u.full_name, u.city, u.avatar_url, s.rating, s.hourly_rate
             FROM users u
             JOIN sitters s ON u.id = s.user_id
-            WHERE u.role = 'sitter' AND u.is_active = 1 AND s.featured_until > ?
+            WHERE u.role = 'sitter' AND u.is_active = 1 AND s.featured_until > $1
             ORDER BY s.rating DESC
-        `).all(now);
+        `, [now]);
         res.json({ success: true, data: featured });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Error interno' });
@@ -86,14 +101,15 @@ router.get('/featured', (req, res) => {
 });
 
 // GET /api/sitters/:id
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
     try {
-        const sitterInfo = db.prepare(`
+        const { rows: sitterRows } = await db.query(`
             SELECT u.id, u.full_name, u.city, u.avatar_url, s.experience_years, s.hourly_rate, s.description, s.rating, s.total_reviews, s.is_verified, s.age, s.education, s.driver_license, s.has_car, s.smoker, s.preferred_location, s.superpowers, s.comfortable_with, s.availability
             FROM users u JOIN sitters s ON u.id = s.user_id
-            WHERE u.id = ? AND u.role = 'sitter'
-        `).get(req.params.id);
+            WHERE u.id = $1 AND u.role = 'sitter'
+        `, [req.params.id]);
 
+        const sitterInfo = sitterRows.length > 0 ? sitterRows[0] : null;
         if (!sitterInfo) return res.status(404).json({ success: false, message: 'Cuidador no encontrado' });
 
         // Add aliases and parse fields
@@ -123,12 +139,12 @@ router.get('/:id', (req, res) => {
             sitterInfo.availability = null;
         }
 
-        const certs = db.prepare('SELECT name, issuing_authority, is_verified FROM certifications WHERE sitter_id = ?').all(req.params.id);
-        const reviews = db.prepare(`
+        const { rows: certs } = await db.query('SELECT name, issuing_authority, is_verified FROM certifications WHERE sitter_id = $1', [req.params.id]);
+        const { rows: reviews } = await db.query(`
             SELECT r.rating, r.comment, r.created_at, u.full_name as parent_name, u.avatar_url as parent_avatar
             FROM reviews r JOIN users u ON r.parent_id = u.id
-            WHERE r.sitter_id = ? AND r.is_visible = 1 ORDER BY r.created_at DESC LIMIT 10
-        `).all(req.params.id);
+            WHERE r.sitter_id = $1 AND r.is_visible = 1 ORDER BY r.created_at DESC LIMIT 10
+        `, [req.params.id]);
 
         res.json({ success: true, data: { ...sitterInfo, certifications: certs, reviews } });
     } catch (err) {
@@ -138,12 +154,12 @@ router.get('/:id', (req, res) => {
 });
 
 // PUT /api/sitters/profile
-router.put('/profile', authenticateToken, (req, res) => {
+router.put('/profile', authenticateToken, async (req, res) => {
     if (req.user.role !== 'sitter') return res.status(403).json({ success: false, message: 'Solo cuidadores' });
     const { description, hourly_rate, experience_years } = req.body;
     try {
-        db.prepare(`UPDATE sitters SET description = ?, hourly_rate = ?, experience_years = ? WHERE user_id = ?`)
-          .run(description, hourly_rate, experience_years, req.user.id);
+        await db.query(`UPDATE sitters SET description = $1, hourly_rate = $2, experience_years = $3 WHERE user_id = $4`,
+          [description, hourly_rate, experience_years, req.user.id]);
         res.json({ success: true, message: 'Perfil cuidador actualizado' });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Error interno' });

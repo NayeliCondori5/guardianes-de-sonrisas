@@ -13,37 +13,42 @@ const seed = async () => {
     const now = new Date().toISOString();
 
     // 1 admin
-    db.prepare(`
-      INSERT OR IGNORE INTO users (id, email, password, role, full_name, is_active, created_at, updated_at) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run('admin-id-1', 'superadmin@admin.com', hash, 'admin', 'Super Admin', 1, now, now);
+    await db.query(`
+      INSERT INTO users (id, email, password, role, full_name, is_active, created_at, updated_at) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT DO NOTHING
+    `, ['admin-id-1', 'superadmin@admin.com', hash, 'admin', 'Super Admin', 1, now, now]);
 
     // 3 parents
     for (let i = 1; i <= 3; i++) {
       const pid = `parent-id-${i}`;
-      db.prepare(`
-        INSERT OR IGNORE INTO users (id, email, password, role, full_name, city, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(pid, `papa${i}@ejemplo.com`, hashUser, 'parent', `Padre ${i}`, 'Madrid', 1, now, now);
+      await db.query(`
+        INSERT INTO users (id, email, password, role, full_name, city, is_active, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT DO NOTHING
+      `, [pid, `papa${i}@ejemplo.com`, hashUser, 'parent', `Padre ${i}`, 'Madrid', 1, now, now]);
       
-      db.prepare(`
-        INSERT OR IGNORE INTO parents (user_id, children_ages, preferred_rate_min, preferred_rate_max)
-        VALUES (?, ?, ?, ?)
-      `).run(pid, JSON.stringify([2, 5]), 10, 20);
+      await db.query(`
+        INSERT INTO parents (user_id, children_ages, preferred_rate_min, preferred_rate_max)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT DO NOTHING
+      `, [pid, JSON.stringify([2, 5]), 10, 20]);
     }
 
     // 5 sitters
     for (let i = 1; i <= 5; i++) {
       const sid = `sitter-id-${i}`;
-      db.prepare(`
-        INSERT OR IGNORE INTO users (id, email, password, role, full_name, city, is_active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(sid, `cuidador${i}@ejemplo.com`, hashUser, 'sitter', `Cuidador ${i}`, 'Madrid', 1, now, now);
+      await db.query(`
+        INSERT INTO users (id, email, password, role, full_name, city, is_active, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT DO NOTHING
+      `, [sid, `cuidador${i}@ejemplo.com`, hashUser, 'sitter', `Cuidador ${i}`, 'Madrid', 1, now, now]);
       
-      db.prepare(`
-        INSERT OR IGNORE INTO sitters (user_id, experience_years, hourly_rate, description, rating, total_reviews, is_verified, background_check_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(sid, i + 2, 12 + i, `Soy cuidador ${i} con mucha experiencia.`, 4.5, 3, 1, 'approved');
+      await db.query(`
+        INSERT INTO sitters (user_id, experience_years, hourly_rate, description, rating, total_reviews, is_verified, background_check_status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT DO NOTHING
+      `, [sid, i + 2, 12 + i, `Soy cuidador ${i} con mucha experiencia.`, 4.5, 3, 1, 'approved']);
     }
 
     // Config default
@@ -65,13 +70,17 @@ const seed = async () => {
       ['company_qr_image_url', '']
     ];
 
-    const insertConfig = db.prepare(`INSERT OR IGNORE INTO site_config (key, value, updated_at) VALUES (?, ?, ?)`);
-    config.forEach(c => insertConfig.run(c[0], c[1], now));
+    for (const c of config) {
+        await db.query(`INSERT INTO site_config (key, value, updated_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [c[0], c[1], now]);
+    }
 
     console.log('Seed completado!');
+    process.exit(0);
   } catch (err) {
     console.error('Error en seed:', err);
+    process.exit(1);
   }
 };
 
-seed();
+// Wait for db to connect
+setTimeout(seed, 1000);

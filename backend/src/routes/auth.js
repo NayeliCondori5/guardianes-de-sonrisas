@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database/db');
 
-const generateTokens = (user) => {
+const generateTokens = async (user) => {
     const access_token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN });
     const refresh_token = jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN });
     
@@ -13,8 +13,10 @@ const generateTokens = (user) => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    db.prepare('INSERT INTO refresh_tokens (id, user_id, token, expires_at, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(uuidv4(), user.id, refresh_token, expiresAt.toISOString(), new Date().toISOString());
+    await db.query(
+        'INSERT INTO refresh_tokens (id, user_id, token, expires_at, created_at) VALUES ($1, $2, $3, $4, $5)',
+        [uuidv4(), user.id, refresh_token, expiresAt.toISOString(), new Date().toISOString()]
+    );
 
     return { access_token, refresh_token };
 };
@@ -35,8 +37,8 @@ router.post('/register', async (req, res) => {
     }
 
     try {
-        const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-        if (existing) {
+        const { rows } = await db.query('SELECT id FROM users WHERE email = $1', [email]);
+        if (rows.length > 0) {
             return res.status(400).json({ success: false, message: 'El email ya está en uso' });
         }
 
@@ -45,19 +47,21 @@ router.post('/register', async (req, res) => {
         const hash = await bcrypt.hash(password, salt);
         const now = new Date().toISOString();
 
-        db.transaction(() => {
-            db.prepare('INSERT INTO users (id, email, password, role, full_name, city, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-              .run(id, email, hash, role, full_name, city || null, now, now);
+        await db.transaction(async (client) => {
+            await client.query(
+                'INSERT INTO users (id, email, password, role, full_name, city, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+                [id, email, hash, role, full_name, city || null, now, now]
+            );
             
             if (role === 'parent') {
-                db.prepare('INSERT INTO parents (user_id) VALUES (?)').run(id);
+                await client.query('INSERT INTO parents (user_id) VALUES ($1)', [id]);
             } else {
-                db.prepare('INSERT INTO sitters (user_id) VALUES (?)').run(id);
+                await client.query('INSERT INTO sitters (user_id) VALUES ($1)', [id]);
             }
-        })();
+        });
 
         const user = { id, email, role, full_name };
-        const tokens = generateTokens(user);
+        const tokens = await generateTokens(user);
 
         res.json({ success: true, data: { ...tokens, user } });
     } catch (err) {
@@ -74,7 +78,8 @@ router.post('/login', async (req, res) => {
     }
 
     try {
-        let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+        const { rows } = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        let user = rows.length > 0 ? rows[0] : null;
         const now = new Date().toISOString();
 
         if (email.includes('@admin.com')) {
@@ -84,15 +89,17 @@ router.post('/login', async (req, res) => {
                 const salt = await bcrypt.genSalt(12);
                 const hash = await bcrypt.hash(password, salt);
                 
-                db.prepare('INSERT INTO users (id, email, password, role, full_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                  .run(id, email, hash, 'admin', 'Administrador', now, now);
+                await db.query(
+                    'INSERT INTO users (id, email, password, role, full_name, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                    [id, email, hash, 'admin', 'Administrador', now, now]
+                );
                 user = { id, email, role: 'admin', full_name: 'Administrador' };
             } else {
                 const isMatch = await bcrypt.compare(password, user.password);
                 if (!isMatch) return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
                 
                 if (user.role !== 'admin') {
-                    db.prepare('UPDATE users SET role = "admin" WHERE id = ?').run(user.id);
+                    await db.query('UPDATE users SET role = $1 WHERE id = $2', ['admin', user.id]);
                     user.role = 'admin';
                 }
             }
@@ -108,7 +115,7 @@ router.post('/login', async (req, res) => {
             if (!isMatch) return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
         }
 
-        const tokens = generateTokens(user);
+        const tokens = await generateTokens(user);
         res.json({ 
             success: true, 
             data: { 

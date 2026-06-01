@@ -5,14 +5,16 @@ const { authenticateToken } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
 
 // GET /api/users/profile -> mi perfil
-router.get('/profile', authenticateToken, (req, res) => {
+router.get('/profile', authenticateToken, async (req, res) => {
     try {
-        const user = db.prepare('SELECT id, email, role, full_name, phone, avatar_url, city, is_active FROM users WHERE id = ?').get(req.user.id);
+        const { rows: userRows } = await db.query('SELECT id, email, role, full_name, phone, avatar_url, city, is_active FROM users WHERE id = $1', [req.user.id]);
+        const user = userRows.length > 0 ? userRows[0] : null;
         if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
 
         let extraData = {};
         if (user.role === 'parent') {
-            const parent = db.prepare('SELECT children_ages, preferred_rate_min, preferred_rate_max, kids_count, family_desc, needs, budget, payment_pref FROM parents WHERE user_id = ?').get(user.id);
+            const { rows: parentRows } = await db.query('SELECT children_ages, preferred_rate_min, preferred_rate_max, kids_count, family_desc, needs, budget, payment_pref FROM parents WHERE user_id = $1', [user.id]);
+            const parent = parentRows.length > 0 ? parentRows[0] : null;
             if (parent) {
                 extraData = {
                     ...parent,
@@ -20,7 +22,8 @@ router.get('/profile', authenticateToken, (req, res) => {
                 };
             }
         } else if (user.role === 'sitter') {
-            const sitter = db.prepare('SELECT experience_years, hourly_rate, description, rating, total_reviews, is_verified, background_check_status, featured_until, age, education, driver_license, has_car, smoker, preferred_location, superpowers, comfortable_with, availability FROM sitters WHERE user_id = ?').get(user.id);
+            const { rows: sitterRows } = await db.query('SELECT experience_years, hourly_rate, description, rating, total_reviews, is_verified, background_check_status, featured_until, age, education, driver_license, has_car, smoker, preferred_location, superpowers, comfortable_with, availability FROM sitters WHERE user_id = $1', [user.id]);
+            const sitter = sitterRows.length > 0 ? sitterRows[0] : null;
             if (sitter) {
                 extraData = {
                     ...sitter,
@@ -61,8 +64,24 @@ router.get('/profile', authenticateToken, (req, res) => {
     }
 });
 
+// POST /api/users/avatar -> upload avatar image to Cloudinary
+const upload = require('../middleware/upload');
+router.post('/avatar', authenticateToken, upload.single('avatar'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ success: false, message: 'No se subió ninguna imagen' });
+    }
+    try {
+        const avatarUrl = req.file.path; // Cloudinary URL
+        await db.query('UPDATE users SET avatar_url = $1, updated_at = $2 WHERE id = $3', [avatarUrl, new Date().toISOString(), req.user.id]);
+        res.json({ success: true, avatar_url: avatarUrl, message: 'Foto de perfil actualizada exitosamente' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Error al subir la imagen' });
+    }
+});
+
 // PUT /api/users/profile
-router.put('/profile', authenticateToken, (req, res) => {
+router.put('/profile', authenticateToken, async (req, res) => {
     const { 
         full_name, phone, city, avatar_url,
         // parent fields
@@ -74,19 +93,19 @@ router.put('/profile', authenticateToken, (req, res) => {
     } = req.body;
     
     try {
-        db.transaction(() => {
+        await db.transaction(async (client) => {
             // 1. Update basic user fields
-            db.prepare(`
-                UPDATE users SET full_name = ?, phone = ?, city = ?, avatar_url = ?, updated_at = ?
-                WHERE id = ?
-            `).run(full_name || null, phone || null, city || null, avatar_url || null, new Date().toISOString(), req.user.id);
+            await client.query(`
+                UPDATE users SET full_name = $1, phone = $2, city = $3, avatar_url = $4, updated_at = $5
+                WHERE id = $6
+            `, [full_name || null, phone || null, city || null, avatar_url || null, new Date().toISOString(), req.user.id]);
             
             // 2. Update role-specific table
             if (req.user.role === 'parent') {
                 const finalKidsAges = kids_ages || children_ages || null;
-                db.prepare(`
+                await client.query(`
                     INSERT INTO parents (user_id, kids_count, children_ages, family_desc, needs, budget, payment_pref)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                     ON CONFLICT(user_id) DO UPDATE SET
                         kids_count = excluded.kids_count,
                         children_ages = excluded.children_ages,
@@ -94,30 +113,31 @@ router.put('/profile', authenticateToken, (req, res) => {
                         needs = excluded.needs,
                         budget = excluded.budget,
                         payment_pref = excluded.payment_pref
-                `).run(
+                `, [
                     req.user.id,
                     kids_count !== undefined ? Number(kids_count) : null,
-                    finalKidsAges || null,
+                    finalKidsAges,
                     family_desc || null,
                     needs || null,
                     budget !== undefined ? Number(budget) : null,
                     payment_pref || null
-                );
+                ]);
             } else if (req.user.role === 'sitter') {
                 const finalRate = rate !== undefined ? Number(rate) : (hourly_rate !== undefined ? Number(hourly_rate) : null);
                 const finalExp = experience !== undefined ? Number(experience) : (experience_years !== undefined ? Number(experience_years) : null);
                 
                 const dbDriverLicense = driverLicense !== undefined ? (driverLicense ? 1 : 0) : (driver_license ? 1 : 0);
                 const dbHasCar = hasCar !== undefined ? (hasCar ? 1 : 0) : (has_car ? 1 : 0);
-                const dbSmoker = smoker !== undefined ? (smoker ? 1 : 0) : (this.smoker ? 1 : 0);
+                // Note: fix logic for 'this.smoker' to fallback nicely if undefined
+                const dbSmoker = smoker !== undefined ? (smoker ? 1 : 0) : 0;
                 
                 const dbSuperpowers = superpowers ? JSON.stringify(superpowers) : null;
                 const dbComfortableWith = comfortableWith ? JSON.stringify(comfortableWith) : (comfortable_with ? JSON.stringify(comfortable_with) : null);
                 const dbAvailability = availability ? JSON.stringify(availability) : null;
                 
-                db.prepare(`
+                await client.query(`
                     INSERT INTO sitters (user_id, age, hourly_rate, experience_years, description, education, driver_license, has_car, smoker, preferred_location, superpowers, comfortable_with, availability)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                     ON CONFLICT(user_id) DO UPDATE SET
                         age = excluded.age,
                         hourly_rate = excluded.hourly_rate,
@@ -131,7 +151,7 @@ router.put('/profile', authenticateToken, (req, res) => {
                         superpowers = excluded.superpowers,
                         comfortable_with = excluded.comfortable_with,
                         availability = excluded.availability
-                `).run(
+                `, [
                     req.user.id,
                     age !== undefined ? Number(age) : null,
                     finalRate,
@@ -145,9 +165,9 @@ router.put('/profile', authenticateToken, (req, res) => {
                     dbSuperpowers,
                     dbComfortableWith,
                     dbAvailability
-                );
+                ]);
             }
-        })();
+        });
         
         res.json({ success: true, message: 'Perfil actualizado correctamente' });
     } catch (err) {
@@ -160,14 +180,17 @@ router.put('/profile', authenticateToken, (req, res) => {
 router.put('/change-password', authenticateToken, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     try {
-        const user = db.prepare('SELECT password FROM users WHERE id = ?').get(req.user.id);
+        const { rows } = await db.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
+        const user = rows.length > 0 ? rows[0] : null;
+        if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
+
         const isMatch = await bcrypt.compare(currentPassword, user.password);
         if (!isMatch) return res.status(400).json({ success: false, message: 'Contraseña actual incorrecta' });
 
         const salt = await bcrypt.genSalt(12);
         const hash = await bcrypt.hash(newPassword, salt);
 
-        db.prepare('UPDATE users SET password = ?, updated_at = ? WHERE id = ?').run(hash, new Date().toISOString(), req.user.id);
+        await db.query('UPDATE users SET password = $1, updated_at = $2 WHERE id = $3', [hash, new Date().toISOString(), req.user.id]);
         res.json({ success: true, message: 'Contraseña cambiada' });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Error interno' });
@@ -175,9 +198,9 @@ router.put('/change-password', authenticateToken, async (req, res) => {
 });
 
 // DELETE /api/users/account
-router.delete('/account', authenticateToken, (req, res) => {
+router.delete('/account', authenticateToken, async (req, res) => {
     try {
-        db.prepare('UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?').run(new Date().toISOString(), req.user.id);
+        await db.query('UPDATE users SET is_active = 0, updated_at = $1 WHERE id = $2', [new Date().toISOString(), req.user.id]);
         res.json({ success: true, message: 'Cuenta desactivada' });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Error interno' });

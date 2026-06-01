@@ -1,15 +1,20 @@
 const multer = require('multer');
-const path = require('path');
-const crypto = require('crypto');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('cloudinary').v2;
 
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, process.env.UPLOADS_DIR || './uploads');
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = crypto.randomBytes(8).toString('hex');
-        cb(null, Date.now() + '-' + uniqueSuffix + path.extname(file.originalname));
-    }
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'guardianes-uploads',
+    allowed_formats: ['jpg', 'png', 'webp', 'jpeg', 'pdf'],
+    public_id: (req, file) => Date.now() + '-' + file.originalname.replace(/\.[^/.]+$/, "")
+  },
 });
 
 const fileFilter = (req, file, cb) => {

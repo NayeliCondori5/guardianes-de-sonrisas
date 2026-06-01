@@ -275,20 +275,21 @@ const SitterDashboard = () => {
         }
     };
 
-    const handleImageUpload = (e) => {
+    const handleImageUpload = async (e) => {
         const file = e.target.files[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = async () => {
-                const base64 = reader.result;
-                try {
-                    await api.put('/users/profile', {
-                        avatar_url: base64
-                    });
-                    setProfileImage(base64);
+            const formData = new FormData();
+            formData.append('avatar', file);
+            try {
+                const response = await api.post('/users/avatar', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                if (response.data && response.data.success) {
+                    const avatarUrl = response.data.avatar_url;
+                    setProfileImage(avatarUrl);
                     
                     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
-                    localStorage.setItem('user', JSON.stringify({ ...currentUser, avatar: base64 }));
+                    localStorage.setItem('user', JSON.stringify({ ...currentUser, avatar: avatarUrl }));
                     
                     setModal({
                         isOpen: true,
@@ -296,11 +297,16 @@ const SitterDashboard = () => {
                         message: "Tu nueva foto de perfil se ha guardado correctamente.",
                         type: 'success'
                     });
-                } catch (err) {
-                    console.error('Error uploading image:', err);
                 }
-            };
-            reader.readAsDataURL(file);
+            } catch (err) {
+                console.error('Error uploading image:', err);
+                setModal({
+                    isOpen: true,
+                    title: "Error",
+                    message: "No se pudo subir la imagen. Intenta con una imagen más pequeña.",
+                    type: 'error'
+                });
+            }
         }
     };
 
