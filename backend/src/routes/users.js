@@ -89,7 +89,12 @@ router.post('/avatar', authenticateToken, upload.single('avatar'), async (req, r
         return res.status(400).json({ success: false, message: 'No se subió ninguna imagen' });
     }
     try {
-        const avatarUrl = req.file.path; // Cloudinary URL
+        let avatarUrl = req.file.path; // Cloudinary URL or local path
+        if (avatarUrl && !avatarUrl.startsWith('http://') && !avatarUrl.startsWith('https://')) {
+            const host = req.get('host');
+            const protocol = req.protocol;
+            avatarUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+        }
         await db.query('UPDATE users SET avatar_url = $1, updated_at = $2 WHERE id = $3', [avatarUrl, new Date().toISOString(), req.user.id]);
         res.json({ success: true, avatar_url: avatarUrl, message: 'Foto de perfil actualizada exitosamente' });
     } catch (err) {

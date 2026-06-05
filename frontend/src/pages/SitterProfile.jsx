@@ -364,6 +364,57 @@ const SitterProfile = () => {
                             ></iframe>
                         </div>
                     </GlassCard>
+
+                    {/* Reseñas de los Padres */}
+                    <GlassCard className="rounded-[32px] p-8 shadow-xl">
+                        <h2 className="font-display-lg text-2xl font-bold text-primary mb-6 flex items-center gap-2">
+                            <Star className="text-secondary" style={{ fill: 'currentColor' }} /> Reseñas de los Padres ({sitter.reviews?.length || 0})
+                        </h2>
+
+                        {sitter.reviews && sitter.reviews.length > 0 ? (
+                            <div className="space-y-4">
+                                {sitter.reviews.map((review, idx) => (
+                                    <div key={idx} className="p-5 rounded-2xl bg-surface-container border border-outline-variant/30 flex gap-4">
+                                        <div className="w-12 h-12 rounded-full overflow-hidden bg-surface-dim shrink-0 border border-outline-variant/40">
+                                            {review.parent_avatar ? (
+                                                <img src={review.parent_avatar} alt={review.parent_name} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center bg-primary/10 text-primary font-bold text-sm">
+                                                    {review.parent_name?.charAt(0) || 'P'}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <h4 className="font-bold text-dark">{review.parent_name || 'Padre de familia'}</h4>
+                                                    <div className="flex items-center text-amber-500 mt-0.5 gap-0.5">
+                                                        {[1, 2, 3, 4, 5].map((star) => (
+                                                            <Star 
+                                                                key={star} 
+                                                                size={12} 
+                                                                className={star <= review.rating ? 'fill-amber-400 text-amber-400' : 'text-on-surface-variant/20'} 
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <span className="text-outline text-xs">
+                                                    {review.created_at ? new Date(review.created_at).toLocaleDateString() : ''}
+                                                </span>
+                                            </div>
+                                            <p className="text-on-surface-variant text-sm mt-3 leading-relaxed italic">
+                                                "{review.comment}"
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-6 text-on-surface-variant text-sm font-medium">
+                                Aún no hay reseñas para este cuidador.
+                            </div>
+                        )}
+                    </GlassCard>
                 </div>
             </div>
             

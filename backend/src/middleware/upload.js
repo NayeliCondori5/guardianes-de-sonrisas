@@ -1,21 +1,47 @@
 const multer = require('multer');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
+const path = require('path');
+const fs = require('fs');
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
+let storage;
 
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'guardianes-uploads',
-    allowed_formats: ['jpg', 'png', 'webp', 'jpeg', 'pdf'],
-    public_id: (req, file) => Date.now() + '-' + file.originalname.replace(/\.[^/.]+$/, "")
-  },
-});
+const isCloudinaryConfigured = process.env.CLOUDINARY_CLOUD_NAME && 
+                              process.env.CLOUDINARY_API_KEY && 
+                              process.env.CLOUDINARY_API_SECRET;
+
+if (isCloudinaryConfigured) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+
+  storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+      folder: 'guardianes-uploads',
+      allowed_formats: ['jpg', 'png', 'webp', 'jpeg', 'pdf'],
+      public_id: (req, file) => Date.now() + '-' + file.originalname.replace(/\.[^/.]+$/, "")
+    },
+  });
+} else {
+  // Local fallback storage
+  const uploadsDir = process.env.UPLOADS_DIR || './uploads';
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
+  storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+  });
+}
 
 const fileFilter = (req, file, cb) => {
     const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
@@ -28,7 +54,6 @@ const fileFilter = (req, file, cb) => {
 
 const upload = multer({ 
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
     fileFilter: fileFilter
 });
 
