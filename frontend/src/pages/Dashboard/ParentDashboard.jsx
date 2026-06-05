@@ -485,12 +485,6 @@ const ParentDashboard = () => {
                                             console.error('Error saving profile:', err);
                                         }
                                     }}>
-                                        <div className="md:col-span-2 flex items-center gap-6 mb-4">
-                                            <div className="w-24 h-24 rounded-full bg-surface-dim border-2 border-primary flex items-center justify-center overflow-hidden">
-                                                <span className="text-on-surface-variant text-sm text-center px-2">Click para subir foto</span>
-                                            </div>
-                                            <button type="button" className="bg-surface-container-highest px-4 py-2 rounded-xl text-sm font-bold shadow-sm">Cambiar Foto</button>
-                                        </div>
                                         <div>
                                             <label className="block text-xs font-bold text-outline uppercase tracking-wider mb-2">Nombre del Padre/Madre</label>
                                             <input type="text" name="full_name" className="w-full p-4 rounded-xl border-none bg-surface-container-low" value={profileForm.full_name} onChange={handleFormChange} />
