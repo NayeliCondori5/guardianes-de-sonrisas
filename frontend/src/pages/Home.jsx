@@ -77,13 +77,13 @@ const Home = () => {
                             
                             {/* Search Bar */}
                             <div className="glass-card p-2 rounded-[32px] shadow-xl flex flex-col md:flex-row gap-2">
-                                <div className="flex-1 flex items-center px-6 border-r border-outline-variant/30">
+                                <div className="flex-1 flex items-center px-6 border-b md:border-b-0 md:border-r border-outline-variant/30">
                                     <div className="flex flex-col w-full py-2">
                                         <label className="font-label-sm text-xs font-bold text-outline uppercase tracking-wider mb-1">¿Qué servicio buscas?</label>
                                         <input className="bg-transparent border-none p-0 focus:ring-0 text-on-surface placeholder:text-outline-variant font-body-md outline-none" placeholder="Ej: Cuidado infantil" type="text" />
                                     </div>
                                 </div>
-                                <div className="flex-1 flex items-center px-6 border-r border-outline-variant/30">
+                                <div className="flex-1 flex items-center px-6 border-b md:border-b-0 md:border-r border-outline-variant/30">
                                     <div className="flex flex-col w-full py-2">
                                         <label className="font-label-sm text-xs font-bold text-outline uppercase tracking-wider mb-1">Ubicación</label>
                                         <input className="bg-transparent border-none p-0 focus:ring-0 text-on-surface placeholder:text-outline-variant font-body-md outline-none" placeholder="Ciudad o Zona" type="text" />
@@ -210,19 +210,19 @@ const Home = () => {
                                     </div>
                                 </div>
 
-                                {/* Manual Controls - Prev/Next Arrows */}
+                                {/* Manual Controls - Prev/Next Arrows (Hidden on Mobile) */}
                                 {reviews.length > 1 && (
                                     <>
                                         <button 
                                             onClick={prevSlide}
-                                            className="absolute left-[-20px] md:left-[-60px] top-1/2 -translate-y-1/2 w-12 h-12 rounded-full glass-card border border-outline-variant/30 flex items-center justify-center text-primary shadow-lg hover:bg-primary hover:text-white transition active:scale-95 z-20"
+                                            className="hidden md:flex absolute left-[-60px] top-1/2 -translate-y-1/2 w-12 h-12 rounded-full glass-card border border-outline-variant/30 items-center justify-center text-primary shadow-lg hover:bg-primary hover:text-white transition active:scale-95 z-20"
                                             aria-label="Reseña anterior"
                                         >
                                             <ChevronLeft size={24} />
                                         </button>
                                         <button 
                                             onClick={nextSlide}
-                                            className="absolute right-[-20px] md:right-[-60px] top-1/2 -translate-y-1/2 w-12 h-12 rounded-full glass-card border border-outline-variant/30 flex items-center justify-center text-primary shadow-lg hover:bg-primary hover:text-white transition active:scale-95 z-20"
+                                            className="hidden md:flex absolute right-[-60px] top-1/2 -translate-y-1/2 w-12 h-12 rounded-full glass-card border border-outline-variant/30 items-center justify-center text-primary shadow-lg hover:bg-primary hover:text-white transition active:scale-95 z-20"
                                             aria-label="Siguiente reseña"
                                         >
                                             <ChevronRight size={24} />

@@ -8,6 +8,7 @@ import api from '../services/api';
 const SearchServices = () => {
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showFilters, setShowFilters] = useState(false);
     
     // Filters and Sorting States
     const [search, setSearch] = useState('');
@@ -73,7 +74,13 @@ const SearchServices = () => {
                         <h1 className="font-display-lg text-4xl font-bold text-primary mb-2">Búsqueda de Servicios</h1>
                         <p className="text-on-surface-variant text-lg">Encuentra y contrata cuidadores según tu necesidad específica.</p>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <button 
+                            onClick={() => setShowFilters(!showFilters)}
+                            className="lg:hidden flex items-center gap-2 text-primary hover:text-primary-container font-bold text-sm bg-primary/10 px-4 py-2.5 rounded-full transition-all duration-300 active:scale-95"
+                        >
+                            <Filter size={16} /> {showFilters ? 'Ocultar Filtros' : 'Mostrar Filtros'}
+                        </button>
                         <button 
                             onClick={handleClearFilters}
                             className="flex items-center gap-2 text-primary hover:text-primary-container font-bold text-sm bg-primary/10 px-4 py-2.5 rounded-full transition-all duration-300 active:scale-95"
@@ -85,8 +92,8 @@ const SearchServices = () => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                     {/* Filters Sidebar */}
-                    <div className="lg:col-span-1">
-                        <GlassCard className="rounded-[32px] p-6 sticky top-28 shadow-xl border border-outline-variant/30">
+                    <div className={`lg:col-span-1 ${showFilters ? 'block' : 'hidden lg:block'}`}>
+                        <GlassCard className="rounded-[32px] p-6 lg:sticky lg:top-28 shadow-xl border border-outline-variant/30">
                             <h3 className="font-display-lg text-xl font-bold text-dark mb-6 flex items-center gap-2">
                                 <Filter size={18} className="text-primary"/> Filtros Avanzados
                             </h3>

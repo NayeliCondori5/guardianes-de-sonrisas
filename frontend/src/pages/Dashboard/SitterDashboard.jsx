@@ -326,7 +326,7 @@ const SitterDashboard = () => {
             <Navbar />
             <div className="container mx-auto px-4 pt-28 pb-12 flex flex-col md:flex-row gap-8">
                 <aside className="w-full md:w-64 flex-shrink-0">
-                    <GlassCard className="rounded-[32px] p-6 shadow-xl sticky top-28">
+                    <GlassCard className="rounded-[32px] p-6 shadow-xl md:sticky md:top-28">
                         <div className="flex flex-col items-center mb-8">
                             <div className="relative group">
                                 <div className="w-24 h-24 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary text-3xl font-bold mb-4 overflow-hidden border-2 border-secondary">

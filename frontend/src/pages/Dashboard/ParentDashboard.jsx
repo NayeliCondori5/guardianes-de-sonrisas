@@ -218,7 +218,7 @@ const ParentDashboard = () => {
             <div className="container mx-auto px-4 pt-28 pb-12 flex flex-col md:flex-row gap-8">
                 {/* Sidebar */}
                 <aside className="w-full md:w-64 flex-shrink-0">
-                    <GlassCard className="rounded-[32px] p-6 shadow-xl sticky top-28">
+                    <GlassCard className="rounded-[32px] p-6 shadow-xl md:sticky md:top-28">
                         <div className="flex flex-col items-center mb-8">
                             <div className="relative group mb-4">
                                 <div className="w-24 h-24 rounded-full bg-primary-fixed-dim flex items-center justify-center text-primary text-3xl font-bold overflow-hidden border-2 border-primary">
@@ -307,14 +307,14 @@ const ParentDashboard = () => {
                             <div className="space-y-4">
                                 {bookings.map(booking => (
                                     <GlassCard key={booking.id} className="rounded-[24px] p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-md hover:shadow-lg transition-shadow">
-                                        <div className="flex-1">
-                                            <h3 className="font-display-lg text-xl font-bold mb-1">{booking.sitter_name}</h3>
-                                            <p className="text-on-surface-variant text-sm flex items-center gap-4">
-                                                <span><Calendar className="inline mr-1" size={14}/> {booking.date}</span>
+                                        <div className="flex-1 text-center md:text-left">
+                                            <h3 className="font-display-lg text-xl font-bold mb-1">{booking.sitterName || booking.sitter_name}</h3>
+                                            <p className="text-on-surface-variant text-sm flex flex-wrap justify-center md:justify-start gap-4">
+                                                <span className="flex items-center gap-1"><Calendar size={14}/> {booking.date}</span>
                                                 <span>{booking.hours} horas</span>
                                             </p>
                                         </div>
-                                        <div className="flex flex-col items-end gap-2">
+                                        <div className="flex flex-col items-center md:items-end gap-2">
                                             <span className="font-bold text-lg">Bs. {(booking.total || 0).toFixed(2)}</span>
                                             <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(booking.status)}`}>
                                                 {getStatusLabel(booking.status)}

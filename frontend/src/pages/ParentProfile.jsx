@@ -70,7 +70,7 @@ const ParentProfile = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     {/* Left Column: Photo & Basic Info */}
                     <div className="md:col-span-1">
-                        <GlassCard className="rounded-[40px] p-8 text-center shadow-2xl border-t-4 border-t-primary sticky top-28">
+                        <GlassCard className="rounded-[40px] p-8 text-center shadow-2xl border-t-4 border-t-primary md:sticky md:top-28">
                             <div className="w-32 h-32 rounded-full bg-primary-fixed-dim mx-auto mb-6 flex items-center justify-center text-primary text-4xl font-bold overflow-hidden border-4 border-white shadow-lg">
                                 {parent.avatar ? (
                                     <img src={parent.avatar} alt={parent.full_name} className="w-full h-full object-cover" />
