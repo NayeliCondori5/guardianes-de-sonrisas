@@ -5,13 +5,22 @@ const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 
 // GET /api/services -> List all approved services or filter by sitter_id / status
+// GET /api/services -> List all approved services or filter by search, category, city, price, and sort
 router.get('/', async (req, res) => {
-    const { sitter_id, status } = req.query;
+    const { sitter_id, status, search, category, city, min_price, max_price, sort } = req.query;
     let query = `
-        SELECT s.*, u.full_name as sitter_name 
+        SELECT 
+            s.*, 
+            u.full_name as sitter_name,
+            u.city as sitter_city,
+            u.avatar_url as sitter_avatar,
+            st.rating as sitter_rating,
+            st.experience_years as sitter_experience,
+            (SELECT COUNT(*) FROM bookings b WHERE b.sitter_id = s.sitter_id AND b.status IN ('confirmed', 'completed')) as booking_count
         FROM services s
         JOIN users u ON s.sitter_id = u.id
-        WHERE 1=1
+        JOIN sitters st ON s.sitter_id = st.user_id
+        WHERE u.role = 'sitter' AND u.is_active = 1
     `;
     const params = [];
 
@@ -19,6 +28,7 @@ router.get('/', async (req, res) => {
         params.push(sitter_id);
         query += ` AND s.sitter_id = $${params.length}`;
     }
+    
     if (status) {
         params.push(status);
         query += ` AND s.status = $${params.length}`;
@@ -27,6 +37,48 @@ router.get('/', async (req, res) => {
         if (!sitter_id) {
             query += ` AND s.status = 'approved'`;
         }
+    }
+
+    if (search) {
+        params.push(`%${search}%`);
+        const searchIdx = params.length;
+        query += ` AND (s.title ILIKE $${searchIdx} OR s.description ILIKE $${searchIdx} OR s.category ILIKE $${searchIdx} OR u.full_name ILIKE $${searchIdx})`;
+    }
+
+    if (category) {
+        params.push(category);
+        query += ` AND s.category = $${params.length}`;
+    }
+
+    if (city) {
+        params.push(`%${city}%`);
+        query += ` AND u.city ILIKE $${params.length}`;
+    }
+
+    if (min_price) {
+        params.push(Number(min_price));
+        query += ` AND s.hourly_rate >= $${params.length}`;
+    }
+
+    if (max_price) {
+        params.push(Number(max_price));
+        query += ` AND s.hourly_rate <= $${params.length}`;
+    }
+
+    // Sort order
+    if (sort === 'recent') {
+        query += ` ORDER BY s.created_at DESC`;
+    } else if (sort === 'rating') {
+        query += ` ORDER BY st.rating DESC, s.created_at DESC`;
+    } else if (sort === 'bookings') {
+        query += ` ORDER BY booking_count DESC, s.created_at DESC`;
+    } else if (sort === 'price_asc') {
+        query += ` ORDER BY s.hourly_rate ASC, s.created_at DESC`;
+    } else if (sort === 'price_desc') {
+        query += ` ORDER BY s.hourly_rate DESC, s.created_at DESC`;
+    } else {
+        // default sorting by most recent
+        query += ` ORDER BY s.created_at DESC`;
     }
 
     try {

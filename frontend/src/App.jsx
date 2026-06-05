@@ -8,6 +8,7 @@ import AdminDashboard from './pages/Dashboard/AdminDashboard';
 import ParentDashboard from './pages/Dashboard/ParentDashboard';
 import SitterDashboard from './pages/Dashboard/SitterDashboard';
 import SearchSitters from './pages/SearchSitters';
+import SearchServices from './pages/SearchServices';
 import SitterProfile from './pages/SitterProfile';
 import ParentProfile from './pages/ParentProfile';
 import Navbar from './components/common/Navbar';
@@ -30,6 +31,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/search" element={<SearchSitters />} />
+          <Route path="/services" element={<SearchServices />} />
           <Route path="/sitter/:id" element={<SitterProfile />} />
           <Route path="/parent/:id" element={<ParentProfile />} />
           
