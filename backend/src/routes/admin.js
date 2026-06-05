@@ -150,8 +150,8 @@ router.get('/bookings', authenticateToken, async (req, res) => {
     try {
         const { rows: bookings } = await db.query(`
             SELECT b.*, 
-                   u1.full_name as parentName, 
-                   u2.full_name as sitterName
+                   u1.full_name as "parentName", 
+                   u2.full_name as "sitterName"
             FROM bookings b
             JOIN users u1 ON b.parent_id = u1.id
             JOIN users u2 ON b.sitter_id = u2.id
