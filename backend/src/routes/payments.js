@@ -25,7 +25,12 @@ router.post('/:bookingId/upload-receipt', authenticateToken, upload.single('rece
         if (!booking) return res.status(400).json({ success: false, message: 'Reserva no encontrada o no pertenece a este usuario' });
 
         // Cloudinary returns the full URL in req.file.path
-        const receiptUrl = req.file ? req.file.path : (req.body.receipt_url || '/uploads/default-receipt.png');
+        let receiptUrl = req.file ? req.file.path : (req.body.receipt_url || '/uploads/default-receipt.png');
+        if (req.file && !receiptUrl.startsWith('http://') && !receiptUrl.startsWith('https://')) {
+            const host = req.get('host');
+            const protocol = req.protocol;
+            receiptUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+        }
         
         await db.transaction(async (client) => {
             const { rows: existingRows } = await client.query('SELECT id FROM payments WHERE booking_id = $1', [booking.id]);

@@ -302,10 +302,11 @@ const SitterDashboard = () => {
                 }
             } catch (err) {
                 console.error('Error uploading image:', err);
+                const errMsg = err.response?.data?.message || "No se pudo subir la imagen. Intenta con una imagen más pequeña.";
                 setModal({
                     isOpen: true,
                     title: "Error",
-                    message: "No se pudo subir la imagen. Intenta con una imagen más pequeña.",
+                    message: errMsg,
                     type: 'error'
                 });
             }
