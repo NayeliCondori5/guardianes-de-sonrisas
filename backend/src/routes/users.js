@@ -84,23 +84,34 @@ router.get('/parent/:id', authenticateToken, async (req, res) => {
 
 // POST /api/users/avatar -> upload avatar image to Cloudinary
 const upload = require('../middleware/upload');
-router.post('/avatar', authenticateToken, upload.single('avatar'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ success: false, message: 'No se subió ninguna imagen' });
-    }
-    try {
-        let avatarUrl = req.file.path; // Cloudinary URL or local path
-        if (avatarUrl && !avatarUrl.startsWith('http://') && !avatarUrl.startsWith('https://')) {
-            const host = req.get('host');
-            const protocol = req.protocol;
-            avatarUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+router.post('/avatar', authenticateToken, (req, res, next) => {
+    upload.single('avatar')(req, res, async (err) => {
+        if (err) {
+            console.error("Upload error caught in middleware wrapper:", err);
+            return res.status(400).json({ 
+                success: false, 
+                message: `Error al subir archivo: ${err.message || err.toString()}` 
+            });
         }
-        await db.query('UPDATE users SET avatar_url = $1, updated_at = $2 WHERE id = $3', [avatarUrl, new Date().toISOString(), req.user.id]);
-        res.json({ success: true, avatar_url: avatarUrl, message: 'Foto de perfil actualizada exitosamente' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: 'Error al subir la imagen' });
-    }
+        
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'No se subió ninguna imagen' });
+        }
+        
+        try {
+            let avatarUrl = req.file.path; // Cloudinary URL or local path
+            if (avatarUrl && !avatarUrl.startsWith('http://') && !avatarUrl.startsWith('https://')) {
+                const host = req.get('host');
+                const protocol = req.protocol;
+                avatarUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+            }
+            await db.query('UPDATE users SET avatar_url = $1, updated_at = $2 WHERE id = $3', [avatarUrl, new Date().toISOString(), req.user.id]);
+            res.json({ success: true, avatar_url: avatarUrl, message: 'Foto de perfil actualizada exitosamente' });
+        } catch (dbErr) {
+            console.error("Database error in avatar upload:", dbErr);
+            res.status(500).json({ success: false, message: `Error al guardar en base de datos: ${dbErr.message}` });
+        }
+    });
 });
 
 // PUT /api/users/profile
