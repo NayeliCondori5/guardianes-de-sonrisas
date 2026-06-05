@@ -6,9 +6,9 @@ Plataforma integral para conectar padres con niñeras de confianza, con sistema 
 
 | Rol | Usuario | Contraseña |
 |-----|---------|------------|
-| Administración | `admin@admin.com` | `Admin123!` |
-| Vendedor (Niñera) | `sitter@example.com` | `Sitter123!` |
-| Comprador (Padre) | `parent@example.com` | `Parent123!` |
+| Administración | `Admin@admin.com` | `123456` |
+| Vendedor (Niñera) | `carlaS@gmail.com` | `123456` |
+| Comprador (Padre) | `fernandezG@gmail.com` | `123456` |
 
 ## 🛠️ Pila tecnológica
 
