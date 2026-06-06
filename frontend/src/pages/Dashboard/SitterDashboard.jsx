@@ -260,6 +260,10 @@ const SitterDashboard = () => {
         };
         
         loadDashboard();
+        const interval = setInterval(() => {
+            refreshData();
+        }, 5000);
+        return () => clearInterval(interval);
     }, [user]);
 
     const handleAction = async (id, newStatus) => {

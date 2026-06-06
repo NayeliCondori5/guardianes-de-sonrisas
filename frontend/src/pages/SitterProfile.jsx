@@ -536,7 +536,10 @@ const SitterProfile = () => {
                 isOpen={modal.isOpen}
                 onClose={() => {
                     setModal({ ...modal, isOpen: false });
-                    if (modal.title === "¡Solicitud Enviada!") navigate('/dashboard/parent');
+                    if (modal.title === "¡Solicitud Enviada!") {
+                        navigate('/dashboard/parent');
+                        window.location.reload();
+                    }
                     if (modal.title === "Inicia Sesión") navigate('/login');
                 }}
                 title={modal.title}

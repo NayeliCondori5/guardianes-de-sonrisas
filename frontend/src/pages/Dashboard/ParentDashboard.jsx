@@ -42,6 +42,28 @@ const ParentDashboard = () => {
         }
     };
 
+    const loadProfile = async () => {
+        if (!user) return;
+        try {
+            const profileResponse = await api.get('/users/profile');
+            if (profileResponse.data && profileResponse.data.success) {
+                const dbUser = profileResponse.data.data;
+                setProfileForm({
+                    full_name: dbUser.full_name || '',
+                    city: dbUser.city || '',
+                    kids_count: dbUser.kids_count || '',
+                    kids_ages: dbUser.kids_ages || '',
+                    family_desc: dbUser.family_desc || '',
+                    needs: dbUser.needs || '',
+                    budget: dbUser.budget || '',
+                    payment_pref: dbUser.payment_pref || 'Transferencia / Depósito'
+                });
+            }
+        } catch (err) {
+            console.error('Error loading parent profile:', err);
+        }
+    };
+
     const refreshData = async () => {
         if (!user) return;
         try {
@@ -79,29 +101,18 @@ const ParentDashboard = () => {
                 });
                 setBookings(mappedBookings);
             }
-
-            // Fetch profile from backend
-            const profileResponse = await api.get('/users/profile');
-            if (profileResponse.data && profileResponse.data.success) {
-                const dbUser = profileResponse.data.data;
-                setProfileForm({
-                    full_name: dbUser.full_name || '',
-                    city: dbUser.city || '',
-                    kids_count: dbUser.kids_count || '',
-                    kids_ages: dbUser.kids_ages || '',
-                    family_desc: dbUser.family_desc || '',
-                    needs: dbUser.needs || '',
-                    budget: dbUser.budget || '',
-                    payment_pref: dbUser.payment_pref || 'Transferencia / Depósito'
-                });
-            }
         } catch (err) {
             console.error('Error loading parent dashboard data:', err);
         }
     };
 
     useEffect(() => {
+        loadProfile();
         refreshData();
+        const interval = setInterval(() => {
+            refreshData();
+        }, 5000);
+        return () => clearInterval(interval);
     }, [user]);
 
     const handlePay = async (id) => {
@@ -475,6 +486,7 @@ const ParentDashboard = () => {
                                             localStorage.setItem('user', JSON.stringify({ ...currentUser, ...profileForm }));
                                             
                                             setIsEditingProfile(false);
+                                            loadProfile();
                                             setModal({
                                                 isOpen: true,
                                                 title: "Perfil Guardado",
