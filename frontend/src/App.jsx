@@ -11,6 +11,7 @@ import SearchSitters from './pages/SearchSitters';
 import SearchServices from './pages/SearchServices';
 import SitterProfile from './pages/SitterProfile';
 import ParentProfile from './pages/ParentProfile';
+import HowItWorks from './pages/HowItWorks';
 import Navbar from './components/common/Navbar';
 
 // Private Route Wrapper
@@ -34,6 +35,7 @@ function App() {
           <Route path="/services" element={<SearchServices />} />
           <Route path="/sitter/:id" element={<SitterProfile />} />
           <Route path="/parent/:id" element={<ParentProfile />} />
+          <Route path="/how-it-works" element={<HowItWorks />} />
           
           <Route path="/dashboard/admin/*" element={
             <PrivateRoute roleRequired="admin">
