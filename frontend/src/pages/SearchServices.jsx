@@ -20,10 +20,11 @@ const SearchServices = () => {
 
     // Available categories
     const categories = [
-        "Cuidado de Bebés",
         "Cuidado General / Juegos",
-        "Tutoría / Apoyo Escolar",
-        "Primeros Auxilios / Enfermería"
+        "Cuidado Especial / Estimulación",
+        "Apoyo Escolar / Tareas",
+        "Cuidado Nocturno / Fin de Semana",
+        "Otros Servicios"
     ];
 
     const fetchServices = async () => {
