@@ -5,7 +5,7 @@ const db = require('../database/db');
 // Helper wrapper to call Gemini API via native fetch (or standard https if fetch is not available)
 async function callGeminiAPI(apiKey, contents, systemInstruction) {
     const model = 'gemini-1.5-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
     
     const body = {
         contents: contents,
