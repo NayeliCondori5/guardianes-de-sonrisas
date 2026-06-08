@@ -23,54 +23,68 @@ async function callGeminiAPI(apiKey, contents, systemInstruction) {
     let lastError = null;
 
     for (const model of modelsToTry) {
-        try {
-            const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
-            
-            const body = {
-                contents: contents,
-                generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 800
+        // Probamos v1beta primero (mejor compatibilidad con gemini-1.5-*), luego v1
+        const endpointVersions = ['v1beta', 'v1'];
+
+        for (const apiVersion of endpointVersions) {
+            try {
+                const url = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`;
+                
+                const body = {
+                    contents: contents,
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 800
+                    }
+                };
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    const status = response.status;
+
+                    // 404: modelo no disponible en esta versión del endpoint → probar la siguiente
+                    if (status === 404) {
+                        console.warn(`[AI] ${model} (${apiVersion}) → 404. Probando siguiente...`);
+                        lastError = new Error(`Gemini Error 404: ${model} (${apiVersion})`);
+                        continue;
+                    }
+
+                    // 429 con limit:0 → el modelo no tiene cuota free tier → probar siguiente
+                    if (status === 429 && errText.includes('limit: 0')) {
+                        console.warn(`[AI] ${model} (${apiVersion}) → 429 limit:0 (sin cuota). Probando siguiente...`);
+                        lastError = new Error(`Gemini Error 429 sin cuota: ${model} (${apiVersion})`);
+                        continue;
+                    }
+
+                    // Cualquier otro error → lanzar inmediatamente
+                    throw new Error(`Gemini API Error (${status}) para ${model} (${apiVersion}): ${errText}`);
                 }
-            };
 
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(body)
-            });
-
-            if (!response.ok) {
-                const errText = await response.text();
-                // Si es un 404, intentamos con el siguiente modelo de la lista
-                if (response.status === 404) {
-                    console.warn(`Modelo ${model} no encontrado (404). Intentando el siguiente...`);
-                    lastError = new Error(`Gemini API Error (404) para ${model}: ${errText}`);
+                const data = await response.json();
+                if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
+                    console.log(`[AI] Usando modelo: ${model} (${apiVersion})`);
+                    return data.candidates[0].content.parts[0].text;
+                } else {
+                    throw new Error('Formato de respuesta de Gemini inválido');
+                }
+            } catch (err) {
+                if (err.message.includes('404') || (err.message.includes('429') && err.message.includes('sin cuota'))) {
+                    lastError = err;
                     continue;
                 }
-                throw new Error(`Gemini API Error (${response.status}) para ${model}: ${errText}`);
+                throw err;
             }
-
-            const data = await response.json();
-            if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
-                return data.candidates[0].content.parts[0].text;
-            } else {
-                throw new Error('Formato de respuesta de Gemini inválido');
-            }
-        } catch (err) {
-            // Si el error contiene 404, pasamos al siguiente modelo
-            if (err.message.includes('404')) {
-                lastError = err;
-                continue;
-            }
-            throw err;
         }
     }
 
-    // Si todos fallaron, lanzamos el último error
-    throw lastError || new Error('No se pudo inicializar ningún modelo de Gemini (todos retornaron 404)');
+    // Si todos los modelos y versiones fallaron
+    throw lastError || new Error('No se encontró ningún modelo de Gemini disponible para esta clave API.');
 }
 
 // POST /api/ai/chat
