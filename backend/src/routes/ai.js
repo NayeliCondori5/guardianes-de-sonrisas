@@ -4,42 +4,73 @@ const db = require('../database/db');
 
 // Helper wrapper to call Gemini API via native fetch (or standard https if fetch is not available)
 async function callGeminiAPI(apiKey, contents, systemInstruction) {
-    const model = 'gemini-1.5-flash';
-    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
+    const modelsToTry = [
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-pro',
+        'gemini-2.0-flash'
+    ];
     
     // Inyectamos las instrucciones de sistema al principio del primer mensaje de usuario
     // para garantizar compatibilidad universal con todas las versiones y entornos del endpoint REST de Gemini.
     if (contents.length > 0 && contents[0].role === 'user' && contents[0].parts && contents[0].parts[0]) {
-        contents[0].parts[0].text = `${systemInstruction}\n\n---\nINSTRUCCIONES DE SISTEMA: Responde al usuario de acuerdo a las reglas y datos provistos anteriormente. Mantente siempre en tu rol de Asistente de Guardianes de Sonrisas.\n---\n\n${contents[0].parts[0].text}`;
-    }
-
-    const body = {
-        contents: contents,
-        generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 800
+        // Evitamos volver a concatenar si se reintenta
+        if (!contents[0].parts[0].text.includes('INSTRUCCIONES DE SISTEMA:')) {
+            contents[0].parts[0].text = `${systemInstruction}\n\n---\nINSTRUCCIONES DE SISTEMA: Responde al usuario de acuerdo a las reglas y datos provistos anteriormente. Mantente siempre en tu rol de Asistente de Guardianes de Sonrisas.\n---\n\n${contents[0].parts[0].text}`;
         }
-    };
-
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Gemini API Error (${response.status}): ${errText}`);
     }
 
-    const data = await response.json();
-    if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
-        return data.candidates[0].content.parts[0].text;
-    } else {
-        throw new Error('Formato de respuesta de Gemini inválido');
+    let lastError = null;
+
+    for (const model of modelsToTry) {
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
+            
+            const body = {
+                contents: contents,
+                generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 800
+                }
+            };
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                // Si es un 404, intentamos con el siguiente modelo de la lista
+                if (response.status === 404) {
+                    console.warn(`Modelo ${model} no encontrado (404). Intentando el siguiente...`);
+                    lastError = new Error(`Gemini API Error (404) para ${model}: ${errText}`);
+                    continue;
+                }
+                throw new Error(`Gemini API Error (${response.status}) para ${model}: ${errText}`);
+            }
+
+            const data = await response.json();
+            if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
+                return data.candidates[0].content.parts[0].text;
+            } else {
+                throw new Error('Formato de respuesta de Gemini inválido');
+            }
+        } catch (err) {
+            // Si el error contiene 404, pasamos al siguiente modelo
+            if (err.message.includes('404')) {
+                lastError = err;
+                continue;
+            }
+            throw err;
+        }
     }
+
+    // Si todos fallaron, lanzamos el último error
+    throw lastError || new Error('No se pudo inicializar ningún modelo de Gemini (todos retornaron 404)');
 }
 
 // POST /api/ai/chat
