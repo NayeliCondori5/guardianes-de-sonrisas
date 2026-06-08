@@ -7,11 +7,14 @@ async function callGeminiAPI(apiKey, contents, systemInstruction) {
     const model = 'gemini-1.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
     
+    // Inyectamos las instrucciones de sistema al principio del primer mensaje de usuario
+    // para garantizar compatibilidad universal con todas las versiones y entornos del endpoint REST de Gemini.
+    if (contents.length > 0 && contents[0].role === 'user' && contents[0].parts && contents[0].parts[0]) {
+        contents[0].parts[0].text = `${systemInstruction}\n\n---\nINSTRUCCIONES DE SISTEMA: Responde al usuario de acuerdo a las reglas y datos provistos anteriormente. Mantente siempre en tu rol de Asistente de Guardianes de Sonrisas.\n---\n\n${contents[0].parts[0].text}`;
+    }
+
     const body = {
         contents: contents,
-        system_instruction: {
-            parts: [{ text: systemInstruction }]
-        },
         generationConfig: {
             temperature: 0.7,
             maxOutputTokens: 800
