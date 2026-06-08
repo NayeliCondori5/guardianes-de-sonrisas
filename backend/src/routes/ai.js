@@ -212,6 +212,8 @@ DIRECTRICES PARA RESPONDER:
             error: err.message
         });
     }
+});
+
 // GET /api/ai/models (Diagnóstico)
 router.get('/models', async (req, res) => {
     const apiKey = process.env.GEMINI_API_KEY;
