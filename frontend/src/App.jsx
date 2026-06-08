@@ -13,6 +13,7 @@ import SitterProfile from './pages/SitterProfile';
 import ParentProfile from './pages/ParentProfile';
 import HowItWorks from './pages/HowItWorks';
 import Navbar from './components/common/Navbar';
+import AIChatWidget from './components/common/AIChatWidget';
 
 // Private Route Wrapper
 const PrivateRoute = ({ children, roleRequired }) => {
@@ -27,6 +28,7 @@ function App() {
   return (
     <AuthProvider>
       <div className="App min-h-screen text-gray-800 font-sans">
+        <AIChatWidget />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />

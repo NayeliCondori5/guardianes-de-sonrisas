@@ -28,6 +28,7 @@ app.use('/api/payments', require('./src/routes/payments'));
 app.use('/api/reviews', require('./src/routes/reviews'));
 app.use('/api/admin', require('./src/routes/admin'));
 app.use('/api/services', require('./src/routes/services'));
+app.use('/api/ai', require('./src/routes/ai'));
 
 // Manejador de errores global
 app.use((err, req, res, next) => {
