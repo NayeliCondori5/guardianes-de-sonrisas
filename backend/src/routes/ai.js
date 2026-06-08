@@ -198,6 +198,23 @@ DIRECTRICES PARA RESPONDER:
             error: err.message
         });
     }
+// GET /api/ai/models (Diagnóstico)
+router.get('/models', async (req, res) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        return res.status(400).json({ success: false, message: 'No se configuró la variable GEMINI_API_KEY en el backend.' });
+    }
+    try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`);
+        if (!response.ok) {
+            const err = await response.text();
+            return res.status(response.status).json({ success: false, error: err });
+        }
+        const data = await response.json();
+        res.json({ success: true, models: data.models });
+    } catch(err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 module.exports = router;
