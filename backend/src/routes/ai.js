@@ -9,7 +9,7 @@ async function callGeminiAPI(apiKey, contents, systemInstruction) {
     
     const body = {
         contents: contents,
-        systemInstruction: {
+        system_instruction: {
             parts: [{ text: systemInstruction }]
         },
         generationConfig: {
