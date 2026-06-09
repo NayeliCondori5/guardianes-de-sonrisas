@@ -181,14 +181,7 @@ const AIChatWidget = () => {
                     </div>
 
                     {/* Banner de Advertencia de Modo Demo */}
-                    {mode === 'demo' && (
-                        <div className="bg-amber-50 dark:bg-amber-950/20 border-b border-amber-100 dark:border-amber-900/25 px-4 py-2 flex items-start space-x-2">
-                            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                            <p className="text-[11px] text-amber-700 dark:text-amber-300 font-sans leading-relaxed">
-                                Ejecutando en <strong>Modo Demo</strong>. Configura <code>GEMINI_API_KEY</code> en tu <code>.env</code> para habilitar la Inteligencia Artificial completa.
-                            </p>
-                        </div>
-                    )}
+
 
                     {/* Mensajes */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-200">
