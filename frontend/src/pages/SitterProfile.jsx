@@ -16,6 +16,7 @@ const getTimeBlock = (time) => {
   return 'noche';
 };
 const TIME_BLOCK_START = { manana: '08:00', mediodia: '12:00', tarde: '16:00', noche: '20:00' };
+const TIME_BLOCK_END = { manana: '12:00', mediodia: '15:00', tarde: '20:00', noche: '23:00' };
 const MAX_HOURS_PER_DAY = 8;
 import api from '../services/api';
 
@@ -30,6 +31,7 @@ const SitterProfile = () => {
     const [bookingForm, setBookingForm] = useState({
         date: '',
         timeBlock: 'manana',
+        startTime: '',
         hours: 4,
         selectedServiceId: 'default'
     });
@@ -120,6 +122,7 @@ const SitterProfile = () => {
         setBookingForm({
             date: tomorrow.toISOString().split('T')[0],
             timeBlock: 'manana',
+            startTime: TIME_BLOCK_START['manana'],
             hours: 4,
             selectedServiceId: 'default'
         });
@@ -161,11 +164,23 @@ const SitterProfile = () => {
                 : 'Cuidado General';
             
             // Build dynamic start and end datetime based on selected date, startTime, and duration hours
-            const startTimeStr = TIME_BLOCK_START[timeBlock] || '08:00';
+            const startTimeStr = bookingForm.startTime || TIME_BLOCK_START[timeBlock] || '08:00';
             const start = `${bookingForm.date}T${startTimeStr}:00`;
             const startDate = new Date(start);
             const endDate = new Date(startDate.getTime() + bookingForm.hours * 60 * 60 * 1000);
             const end = endDate.toISOString().slice(0,19);
+            // Validate that end time does not exceed block end
+            const blockEndStr = TIME_BLOCK_END[timeBlock] || '23:59';
+            const blockEnd = new Date(`${bookingForm.date}T${blockEndStr}:00`);
+            if (endDate > blockEnd) {
+                setModal({
+                    isOpen: true,
+                    title: 'Horario excedido',
+                    message: `El servicio finaliza después de la franja ${timeBlock}. Por favor reduce la duración o elige otro bloque.`,
+                    type: 'error'
+                });
+                return;
+            }
 
             await api.post('/bookings', {
                 sitter_id: id,
@@ -512,16 +527,28 @@ const SitterProfile = () => {
                                <div className="mt-4">
                                  <label className="block text-xs font-bold text-primary uppercase tracking-wider mb-2">Bloque Horario</label>
                                  <select
-                                   value={bookingForm.timeBlock}
-                                   onChange={(e) => setBookingForm({ ...bookingForm, timeBlock: e.target.value })}
-                                   className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
-                                 >
-                                   {Object.entries(sitter.availability?.[DAYS_ABBR[new Date(bookingForm.date).getDay()] ] || {}).map(([block, available]) => (
-                                     <option key={block} value={block} disabled={!available}>
-                                       {timeLabels[block] || block}
-                                     </option>
-                                   ))}
-                                 </select>
+                                    value={bookingForm.timeBlock}
+                                    onChange={(e) => setBookingForm({ ...bookingForm, timeBlock: e.target.value, startTime: TIME_BLOCK_START[e.target.value] })}
+                                    className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
+                                  >
+                                    {Object.entries(sitter.availability?.[DAYS_ABBR[new Date(bookingForm.date).getDay()] ] || {}).map(([block, available]) => (
+                                      <option key={block} value={block} disabled={!available}>
+                                        {timeLabels[block] || block}
+                                      </option>
+                                    ))}
+                                  </select>
+                               </div>
+
+                               <div className="mt-4">
+                                   <label className="block text-xs font-bold text-primary uppercase tracking-wider mb-2">Hora de Inicio</label>
+                                   <input 
+                                       type="time" 
+                                       value={bookingForm.startTime || ""}
+                                       min={TIME_BLOCK_START[bookingForm.timeBlock]}
+                                       max={TIME_BLOCK_END[bookingForm.timeBlock]}
+                                       onChange={(e) => setBookingForm({...bookingForm, startTime: e.target.value})}
+                                       className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
+                                   />
                                </div>
 
                             {/* Horas */}
@@ -535,7 +562,7 @@ const SitterProfile = () => {
                                 <input 
                                     type="range"
                                     min="1"
-                                    max="24"
+                                    max="12"
                                     value={bookingForm.hours}
                                     onChange={(e) => setBookingForm({ ...bookingForm, hours: parseInt(e.target.value) })}
                                     className="w-full accent-primary h-2 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer"
@@ -567,6 +594,9 @@ const SitterProfile = () => {
                                         ) * bookingForm.hours}
                                     </span>
                                 </div>
+                                <p className="text-[10px] text-outline mt-2 italic">
+                                    Fin del servicio: {new Date(new Date(`${bookingForm.date}T${bookingForm.startTime}`).getTime() + (bookingForm.hours * 60 * 60 * 1000)).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                </p>
                             </div>
                          <AvailabilityCalendar availability={sitter.availability} />
                         </div>
