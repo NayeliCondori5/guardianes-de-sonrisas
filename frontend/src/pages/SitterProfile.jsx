@@ -17,6 +17,7 @@ const SitterProfile = () => {
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [bookingForm, setBookingForm] = useState({
         date: '',
+        startTime: '09:00',
         hours: 4,
         selectedServiceId: 'default'
     });
@@ -106,6 +107,7 @@ const SitterProfile = () => {
         
         setBookingForm({
             date: tomorrow.toISOString().split('T')[0],
+            startTime: '09:00',
             hours: 4,
             selectedServiceId: 'default'
         });
@@ -123,8 +125,11 @@ const SitterProfile = () => {
                 ? `Servicio Especializado: ${activeService.title}` 
                 : 'Cuidado General';
             
-            const start = `${bookingForm.date}T09:00:00`;
-            const end = `${bookingForm.date}T13:00:00`;
+            // Build dynamic start and end datetime based on selected date, startTime, and duration hours
+            const start = `${bookingForm.date}T${bookingForm.startTime}:00`;
+            const startDate = new Date(start);
+            const endDate = new Date(startDate.getTime() + bookingForm.hours * 60 * 60 * 1000);
+            const end = endDate.toISOString().slice(0,19);
 
             await api.post('/bookings', {
                 sitter_id: id,
@@ -266,6 +271,7 @@ const SitterProfile = () => {
                                                         }
                                                         setBookingForm({
                                                             date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+                                                            startTime: '09:00',
                                                             hours: 4,
                                                             selectedServiceId: service.id
                                                         });

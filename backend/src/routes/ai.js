@@ -116,7 +116,7 @@ router.post('/chat', async (req, res) => {
         } else if (lowerMsg.includes('registro') || lowerMsg.includes('registrarse') || lowerMsg.includes('cómo registrarse') || lowerMsg.includes('registrar')) {
             reply = 'Para registrar una cuenta, sigue estos pasos:\n1. Dirígete a la página de inicio y haz clic en **Registrarse**.\n2. Completa tus datos personales (nombre, email, contraseña) y verifica tu correo.\n3. Elige si serás **Padre** o **Cuidador** y completa la información requerida.\n4. Una vez creado el perfil, podrás iniciar sesión y comenzar a usar la plataforma.';
         } else {
-            reply = 'Lo siento, no entendí tu pregunta. Por favor, reformúlala.';
+            reply = 'No entendí la pregunta. Por favor, intenta de nuevo.';
         }
 
         return res.json({

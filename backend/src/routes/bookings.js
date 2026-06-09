@@ -6,7 +6,22 @@ const { v4: uuidv4 } = require('uuid');
 
 router.post('/', authenticateToken, async (req, res) => {
     if (req.user.role !== 'parent') return res.status(403).json({ success: false, message: 'Solo los padres pueden crear contrataciones' });
-    const { sitter_id, start_datetime, end_datetime, total_hours, message } = req.body;
+    const { sitter_id, start_datetime, end_datetime, total_hours: providedHours, message } = req.body;
+    // Validate required fields
+    if (!sitter_id || !start_datetime || !end_datetime) {
+        return res.status(400).json({ success: false, message: 'Se requieren sitter_id, start_datetime y end_datetime' });
+    }
+    // Compute total hours if not provided
+    const start = new Date(start_datetime);
+    const end = new Date(end_datetime);
+    if (isNaN(start) || isNaN(end) || end <= start) {
+        return res.status(400).json({ success: false, message: 'Fechas inválidas' });
+    }
+    const total_hours = providedHours ?? Math.round((end - start) / (1000 * 60 * 60));
+    // Ensure total_hours is a positive number
+    if (total_hours <= 0) {
+        return res.status(400).json({ success: false, message: 'Horas totales inválidas' });
+    }
 
     try {
         const { rows: sitterRows } = await db.query('SELECT hourly_rate, is_verified FROM sitters WHERE user_id = $1', [sitter_id]);
