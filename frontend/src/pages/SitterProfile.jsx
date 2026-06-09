@@ -527,7 +527,7 @@ const SitterProfile = () => {
                                    className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
                                  />
                                </div>
-                               <div className="mt-4">
+                               <div className="mt-2">
                                  <label className="block text-xs font-bold text-primary uppercase tracking-wider mb-2">Bloque Horario</label>
                                  <select
                                     value={bookingForm.timeBlock}
@@ -542,7 +542,7 @@ const SitterProfile = () => {
                                   </select>
                                </div>
 
-                               <div className="mt-4">
+                               <div className="mt-2">
                                    <label className="block text-xs font-bold text-primary uppercase tracking-wider mb-2">Hora de Inicio</label>
                                    <input 
                                        type="time" 
@@ -571,7 +571,7 @@ const SitterProfile = () => {
                                     className="w-full accent-primary h-2 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer"
                                 />
                                 {/* Número de niños */}
-                                <div className="flex justify-between items-center mt-4 mb-2">
+                                <div className="flex justify-between items-center mt-2 mb-2">
                                     <label className="text-xs font-bold text-primary uppercase tracking-wider">
                                         Número de niños
                                     </label>
@@ -630,7 +630,7 @@ const SitterProfile = () => {
                                 onClick={submitBookingRequest}
                                 className="flex-1 bg-primary text-white py-3 rounded-full font-bold shadow-lg hover:bg-primary-container transition active:scale-95"
                             >
-                                Enviar Solicitud
+                                Solicitar al cuidador
                             </button>
                         </div>
                     </GlassCard>
