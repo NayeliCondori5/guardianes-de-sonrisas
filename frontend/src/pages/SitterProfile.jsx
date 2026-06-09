@@ -33,7 +33,8 @@ const SitterProfile = () => {
         timeBlock: 'manana',
         startTime: '',
         hours: 4,
-        selectedServiceId: 'default'
+        selectedServiceId: 'default',
+        numChildren: 1
     });
 
     useEffect(() => {
@@ -118,13 +119,13 @@ const SitterProfile = () => {
         // Prepopulate tomorrow's date
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
-        
         setBookingForm({
             date: tomorrow.toISOString().split('T')[0],
             timeBlock: 'manana',
             startTime: TIME_BLOCK_START['manana'],
             hours: 4,
-            selectedServiceId: 'default'
+            selectedServiceId: 'default',
+            numChildren: 1
         });
         setIsBookingModalOpen(true);
     };
@@ -182,13 +183,14 @@ const SitterProfile = () => {
                 return;
             }
 
-            await api.post('/bookings', {
-                sitter_id: id,
-                start_datetime: start,
-                end_datetime: end,
-                total_hours: bookingForm.hours,
-                message: message
-            });
+             await api.post('/bookings', {
+                 sitter_id: id,
+                 start_datetime: start,
+                 end_datetime: end,
+                 total_hours: bookingForm.hours,
+                 num_children: bookingForm.numChildren,
+                 message: message
+             });
 
             setIsBookingModalOpen(false);
             setModal({
@@ -324,7 +326,8 @@ const SitterProfile = () => {
                                                             date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
                                                             startTime: '09:00',
                                                             hours: 4,
-                                                            selectedServiceId: service.id
+                                                            selectedServiceId: service.id,
+                                                            numChildren: 1
                                                         });
                                                         setIsBookingModalOpen(true);
                                                     }}
@@ -567,6 +570,21 @@ const SitterProfile = () => {
                                     onChange={(e) => setBookingForm({ ...bookingForm, hours: parseInt(e.target.value) })}
                                     className="w-full accent-primary h-2 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer"
                                 />
+                                {/* Número de niños */}
+                                <div className="flex justify-between items-center mt-4 mb-2">
+                                    <label className="text-xs font-bold text-primary uppercase tracking-wider">
+                                        Número de niños
+                                    </label>
+                                    <span className="text-sm font-bold text-primary">{bookingForm.numChildren} niño(s)</span>
+                                </div>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="5"
+                                    value={bookingForm.numChildren}
+                                    onChange={(e) => setBookingForm({ ...bookingForm, numChildren: Math.max(1, parseInt(e.target.value) || 1) })}
+                                    className="w-full p-2 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary"
+                                />
                             </div>
 
                             {/* Detalle de Precios */}
@@ -591,7 +609,7 @@ const SitterProfile = () => {
                                         Bs. {(bookingForm.selectedServiceId === 'default' 
                                             ? sitter.rate 
                                             : sitterServices.find(s => s.id === bookingForm.selectedServiceId)?.rate || sitter.rate
-                                        ) * bookingForm.hours}
+                                        ) * bookingForm.hours * bookingForm.numChildren}
                                     </span>
                                 </div>
                                 <p className="text-[10px] text-outline mt-2 italic">
