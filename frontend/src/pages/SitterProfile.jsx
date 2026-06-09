@@ -5,6 +5,18 @@ import GlassCard from '../components/common/GlassCard';
 import { useAuth } from '../context/AuthContext';
 import { MapPin, Star, ShieldCheck, ShieldOff, Heart, Car, Home, Cigarette, BookOpen, Briefcase, X } from 'lucide-react';
 import CustomModal from '../components/common/CustomModal';
+import AvailabilityCalendar from '../components/AvailabilityCalendar';
+// Helper to map date and time to sitter availability
+const DAYS_ABBR = ['DOM','LUN','MAR','MIE','JUE','VIE','SAB'];
+const getTimeBlock = (time) => {
+  const [hour] = time.split(':').map(Number);
+  if (hour >= 6 && hour < 12) return 'manana';
+  if (hour >= 12 && hour < 15) return 'mediodia';
+  if (hour >= 15 && hour < 19) return 'tarde';
+  return 'noche';
+};
+const TIME_BLOCK_START = { manana: '08:00', mediodia: '12:00', tarde: '16:00', noche: '20:00' };
+const MAX_HOURS_PER_DAY = 8;
 import api from '../services/api';
 
 const SitterProfile = () => {
@@ -17,7 +29,7 @@ const SitterProfile = () => {
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [bookingForm, setBookingForm] = useState({
         date: '',
-        startTime: '09:00',
+        timeBlock: 'manana',
         hours: 4,
         selectedServiceId: 'default'
     });
@@ -107,7 +119,7 @@ const SitterProfile = () => {
         
         setBookingForm({
             date: tomorrow.toISOString().split('T')[0],
-            startTime: '09:00',
+            timeBlock: 'manana',
             hours: 4,
             selectedServiceId: 'default'
         });
@@ -115,7 +127,30 @@ const SitterProfile = () => {
     };
 
     const submitBookingRequest = async () => {
+  if (bookingForm.hours > MAX_HOURS_PER_DAY) {
+    setModal({
+      isOpen: true,
+      title: 'Límite de horas',
+      message: `No puedes reservar más de ${MAX_HOURS_PER_DAY} horas por día.`,
+      type: 'error'
+    });
+    return;
+  }
         try {
+            // Validate availability based on sitter's weekly schedule
+            const selectedDate = new Date(bookingForm.date);
+            const dayAbbr = DAYS_ABBR[selectedDate.getDay()]; // getDay: 0=Sunday
+            const timeBlock = bookingForm.timeBlock;
+            if (!sitter.availability?.[dayAbbr]?.[timeBlock]) {
+                setModal({
+                    isOpen: true,
+                    title: "Horario no disponible",
+                    message: `El cuidador no está disponible el ${dayAbbr} en la franja ${timeBlock}. Por favor elige otro día u hora.`,
+                    type: 'error'
+                });
+                return;
+            }
+
             const isDefault = bookingForm.selectedServiceId === 'default';
             const activeService = isDefault 
                 ? null 
@@ -126,7 +161,8 @@ const SitterProfile = () => {
                 : 'Cuidado General';
             
             // Build dynamic start and end datetime based on selected date, startTime, and duration hours
-            const start = `${bookingForm.date}T${bookingForm.startTime}:00`;
+            const startTimeStr = TIME_BLOCK_START[timeBlock] || '08:00';
+            const start = `${bookingForm.date}T${startTimeStr}:00`;
             const startDate = new Date(start);
             const endDate = new Date(startDate.getTime() + bookingForm.hours * 60 * 60 * 1000);
             const end = endDate.toISOString().slice(0,19);
@@ -466,13 +502,27 @@ const SitterProfile = () => {
                                 <label className="block text-xs font-bold text-primary uppercase tracking-wider mb-2">
                                     Fecha del Servicio
                                 </label>
-                                <input 
-                                    type="date"
-                                    value={bookingForm.date}
-                                    onChange={(e) => setBookingForm({ ...bookingForm, date: e.target.value })}
-                                    className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
-                                />
-                            </div>
+                                 <input
+                                   type="date"
+                                   value={bookingForm.date}
+                                   onChange={(e) => setBookingForm({ ...bookingForm, date: e.target.value })}
+                                   className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
+                                 />
+                               </div>
+                               <div className="mt-4">
+                                 <label className="block text-xs font-bold text-primary uppercase tracking-wider mb-2">Bloque Horario</label>
+                                 <select
+                                   value={bookingForm.timeBlock}
+                                   onChange={(e) => setBookingForm({ ...bookingForm, timeBlock: e.target.value })}
+                                   className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
+                                 >
+                                   {Object.entries(sitter.availability?.[DAYS_ABBR[new Date(bookingForm.date).getDay()] ] || {}).map(([block, available]) => (
+                                     <option key={block} value={block} disabled={!available}>
+                                       {timeLabels[block] || block}
+                                     </option>
+                                   ))}
+                                 </select>
+                               </div>
 
                             {/* Horas */}
                             <div>
@@ -518,6 +568,7 @@ const SitterProfile = () => {
                                     </span>
                                 </div>
                             </div>
+                         <AvailabilityCalendar availability={sitter.availability} />
                         </div>
 
                         <div className="flex gap-4 mt-8">
