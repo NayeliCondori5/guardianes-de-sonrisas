@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Star, ChevronLeft, ChevronRight, Quote } from 'lucide-react';
 
+import Navbar from '../components/common/Navbar';
+
 const Home = () => {
     const [reviews, setReviews] = useState([]);
     const [activeIndex, setActiveIndex] = useState(0);
