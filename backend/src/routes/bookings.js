@@ -50,6 +50,48 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
+router.get('/my', authenticateToken, async (req, res) => {
+    try {
+        let query;
+        if (req.user.role === 'parent') {
+            query = `
+                SELECT b.*, u.full_name as sitter_name, u.avatar_url as sitter_avatar, p.status as payment_status,
+                       (SELECT COUNT(*) FROM reviews r WHERE r.booking_id = b.id) as review_count
+                FROM bookings b 
+                JOIN users u ON b.sitter_id = u.id 
+                LEFT JOIN payments p ON b.id = p.booking_id
+                WHERE b.parent_id = $1 
+                ORDER BY b.created_at DESC
+            `;
+        } else if (req.user.role === 'sitter') {
+            query = `
+                SELECT b.*, u.full_name as parent_name, u.avatar_url as parent_avatar, p.status as payment_status,
+                       (SELECT COUNT(*) FROM reviews r WHERE r.booking_id = b.id) as review_count
+                FROM bookings b 
+                JOIN users u ON b.parent_id = u.id 
+                LEFT JOIN payments p ON b.id = p.booking_id
+                WHERE b.sitter_id = $1 
+                ORDER BY b.created_at DESC
+            `;
+        } else {
+            return res.status(403).json({ success: false });
+        }
+        
+        const { rows: bookings } = await db.query(query, [req.user.id]);
+        
+        // Map reviewed boolean
+        const mappedBookings = bookings.map(b => ({
+            ...b,
+            reviewed: parseInt(b.review_count, 10) > 0
+        }));
+        
+        res.json({ success: true, data: mappedBookings });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Error interno' });
+    }
+});
+
 
 // GET /api/bookings/parent/:parentId/pending - Retrieves pending booking requests for a specific parent
 router.get('/parent/:parentId/pending', authenticateToken, async (req, res) => {
