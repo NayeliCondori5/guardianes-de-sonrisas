@@ -38,8 +38,11 @@ const db = {
             await pool.query(schema);
             console.log('PostgreSQL: esquema de base de datos verificado.');
         }
+        // Ejecutar migración para añadir num_children si no existe
+        await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS num_children INTEGER DEFAULT 1;');
+        console.log('PostgreSQL: migración de columnas completada.');
     } catch (err) {
-        console.error('Error inicializando esquema PostgreSQL:', err);
+        console.error('Error inicializando esquema o migraciones PostgreSQL:', err);
     }
 })();
 

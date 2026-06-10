@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS bookings (
   cancelled_reason TEXT,
   cancelled_by TEXT,
   created_at TEXT,
+  num_children INTEGER DEFAULT 1,
   FOREIGN KEY (parent_id) REFERENCES parents(user_id) ON DELETE CASCADE,
   FOREIGN KEY (sitter_id) REFERENCES sitters(user_id) ON DELETE CASCADE
 );
