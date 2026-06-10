@@ -9,14 +9,13 @@ const ParentProfile = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const [parent, setParent] = useState(null);
+    const [bookingRequests, setBookingRequests] = useState([]);
+    const [bookingLoading, setBookingLoading] = useState(false);
 
     useEffect(() => {
         const fetchParent = async () => {
             try {
-                // Si el ID es igual al del usuario en sesión, intentamos cargar el perfil propio para asegurar los datos recientes
-                const currentSession = JSON.parse(localStorage.getItem('user') || '{}');
-                
-                // Hacemos el llamado a la API real
+                // Fetch parent profile
                 const response = await api.get(`/users/parent/${id}`);
                 if (response.data && response.data.success) {
                     setParent(response.data.data);
@@ -24,12 +23,31 @@ const ParentProfile = () => {
                     setParent({ error: true });
                 }
             } catch (err) {
-                console.error("Error fetching parent profile:", err);
+                console.error('Error fetching parent profile:', err);
                 setParent({ error: true });
             }
         };
 
+        const fetchBookings = async () => {
+            if (!id) return;
+            setBookingLoading(true);
+            try {
+                const res = await api.get(`/bookings/parent/${id}/pending`);
+                if (res.data && res.data.success) {
+                    setBookingRequests(res.data.data);
+                } else {
+                    setBookingRequests([]);
+                }
+            } catch (err) {
+                console.error('Error fetching booking requests:', err);
+                setBookingRequests([]);
+            } finally {
+                setBookingLoading(false);
+            }
+        };
+
         fetchParent();
+        fetchBookings();
     }, [id]);
 
     if (!parent) return (
@@ -97,7 +115,32 @@ const ParentProfile = () => {
                     </div>
 
                     {/* Right Column: Detailed Info */}
-                    <div className="md:col-span-2 space-y-8">
+                    <div className="lg:col-span-2 space-y-6">
+                        {/* Booking Requests Section */}
+                        <GlassCard className="rounded-[32px] p-8 shadow-xl">
+                            <h2 className="font-display-lg text-2xl font-bold text-primary mb-4 flex items-center gap-2">
+                                <Heart className="text-error" /> Solicitudes de Cuidado Pendientes
+                            </h2>
+                            {bookingLoading ? (
+                                <p className="text-on-surface-variant">Cargando solicitudes...</p>
+                            ) : bookingRequests.length > 0 ? (
+                                <div className="space-y-4">
+                                    {bookingRequests.map((b) => (
+                                        <div key={b.id} className="p-4 rounded-2xl bg-surface-container border border-outline-variant/30">
+                                            <p className="font-medium text-on-surface mb-1"><span className="font-bold">Servicio:</span> {b.message || 'Cuidado General'}</p>
+                                            <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Fecha del Servicio:</span> {new Date(b.start_datetime).toLocaleDateString()}</p>
+                                            <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Bloque Horario:</span> {new Date(b.start_datetime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {new Date(b.end_datetime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                                            <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Duración (Horas):</span> {b.total_hours}</p>
+                                            <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Número de niños:</span> {b.num_children}</p>
+                                            {b.message && <p className="text-sm text-on-surface-variant"><span className="font-bold">Detalle:</span> {b.message}</p>}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-on-surface-variant">No hay solicitudes pendientes.</p>
+                            )}
+                        </GlassCard>
+
                         <GlassCard className="rounded-[40px] p-8 shadow-xl">
                             <h2 className="font-display-lg text-2xl font-bold mb-6 flex items-center gap-2">
                                 <Heart className="text-primary" /> Sobre nuestra familia
