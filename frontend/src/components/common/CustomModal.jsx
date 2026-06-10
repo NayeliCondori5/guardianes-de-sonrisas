@@ -20,7 +20,7 @@ const CustomModal = ({ isOpen, onClose, title, message, type = 'success' }) => {
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300 overflow-y-auto">
 
-            <GlassCard className={`w-full max-w-sm max-h-[90vh] rounded-[32px] p-8 shadow-2xl relative border-t-8 ${colors[type]} animate-in zoom-in duration-300 overflow-y-auto`}>
+            <GlassCard className={`w-full max-w-lg max-h-[90vh] rounded-[32px] p-8 shadow-2xl relative border-t-8 ${colors[type]} animate-in zoom-in duration-300 overflow-y-auto`}>
                 <button 
                     onClick={onClose}
                     className="absolute top-4 right-4 p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition"
