@@ -38,10 +38,10 @@ router.post('/', authenticateToken, async (req, res) => {
         const total_amount = subtotal + platform_fee;
 
         const id = uuidv4();
-        await db.query(`
-            INSERT INTO bookings (id, parent_id, sitter_id, start_datetime, end_datetime, total_hours, hourly_rate, subtotal, platform_fee, total_amount, message, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        `, [id, req.user.id, sitter_id, start_datetime, end_datetime, total_hours, sitter.hourly_rate, subtotal, platform_fee, total_amount, message, new Date().toISOString()]);
+                        await db.query(`
+                    INSERT INTO bookings (id, parent_id, sitter_id, start_datetime, end_datetime, total_hours, hourly_rate, subtotal, platform_fee, total_amount, message, num_children, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                `, [id, req.user.id, sitter_id, start_datetime, end_datetime, total_hours, sitter.hourly_rate, subtotal, platform_fee, total_amount, message, req.body.num_children || 1, new Date().toISOString()]);
 
         res.json({ success: true, data: { id, total_amount }, message: 'Contratación solicitada con éxito' });
     } catch (err) {
@@ -50,42 +50,21 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
-router.get('/my', authenticateToken, async (req, res) => {
+
+// GET /api/bookings/parent/:parentId/pending - Retrieves pending booking requests for a specific parent
+router.get('/parent/:parentId/pending', authenticateToken, async (req, res) => {
     try {
-        let query;
-        if (req.user.role === 'parent') {
-            query = `
-                SELECT b.*, u.full_name as sitter_name, u.avatar_url as sitter_avatar, p.status as payment_status,
-                       (SELECT COUNT(*) FROM reviews r WHERE r.booking_id = b.id) as review_count
-                FROM bookings b 
-                JOIN users u ON b.sitter_id = u.id 
-                LEFT JOIN payments p ON b.id = p.booking_id
-                WHERE b.parent_id = $1 
-                ORDER BY b.created_at DESC
-            `;
-        } else if (req.user.role === 'sitter') {
-            query = `
-                SELECT b.*, u.full_name as parent_name, u.avatar_url as parent_avatar, p.status as payment_status,
-                       (SELECT COUNT(*) FROM reviews r WHERE r.booking_id = b.id) as review_count
-                FROM bookings b 
-                JOIN users u ON b.parent_id = u.id 
-                LEFT JOIN payments p ON b.id = p.booking_id
-                WHERE b.sitter_id = $1 
-                ORDER BY b.created_at DESC
-            `;
-        } else {
-            return res.status(403).json({ success: false });
-        }
-        
-        const { rows: bookings } = await db.query(query, [req.user.id]);
-        
-        // Map reviewed boolean
-        const mappedBookings = bookings.map(b => ({
-            ...b,
-            reviewed: parseInt(b.review_count, 10) > 0
-        }));
-        
-        res.json({ success: true, data: mappedBookings });
+        // Only allow sitters to view pending requests of parents they are interested in
+        if (req.user.role !== 'sitter') return res.status(403).json({ success: false, message: 'Solo los cuidadores pueden ver solicitudes pendientes' });
+        const { parentId } = req.params;
+        const query = `
+            SELECT id, start_datetime, end_datetime, total_hours, num_children, message, total_amount, hourly_rate
+            FROM bookings
+            WHERE parent_id = $1 AND status = 'pending'
+            ORDER BY created_at DESC
+        `;
+        const { rows: bookings } = await db.query(query, [parentId]);
+        res.json({ success: true, data: bookings });
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Error interno' });
