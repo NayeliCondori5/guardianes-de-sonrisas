@@ -121,24 +121,31 @@ const ParentProfile = () => {
                             <h2 className="font-display-lg text-2xl font-bold text-primary mb-4 flex items-center gap-2">
                                 <Heart className="text-error" /> Solicitudes de Cuidado Pendientes
                             </h2>
-                            {bookingLoading ? (
-                                <p className="text-on-surface-variant">Cargando solicitudes...</p>
-                            ) : bookingRequests.length > 0 ? (
-                                <div className="space-y-4">
-                                    {bookingRequests.map((b) => (
-                                        <div key={b.id} className="p-4 rounded-2xl bg-surface-container border border-outline-variant/30">
-                                            <p className="font-medium text-on-surface mb-1"><span className="font-bold">Servicio:</span> {b.message || 'Cuidado General'}</p>
-                                            <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Fecha del Servicio:</span> {new Date(b.start_datetime).toLocaleDateString()}</p>
-                                            <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Bloque Horario:</span> {new Date(b.start_datetime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {new Date(b.end_datetime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
-                                            <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Duración (Horas):</span> {b.total_hours}</p>
-                                            <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Número de niños:</span> {b.num_children}</p>
-                                            {b.message && <p className="text-sm text-on-surface-variant"><span className="font-bold">Detalle:</span> {b.message}</p>}
-                                        </div>
-                                    ))}
+                        {bookingLoading ? (
+                        <p className="text-on-surface-variant">Cargando solicitud...</p>
+                    ) : bookingRequests.length > 0 ? (
+                        bookingRequests.map((b) => {
+                            const pricePerChild = b.total_amount && b.num_children ? (b.total_amount / b.num_children).toFixed(2) : null;
+                            return (
+                                <div key={b.id} className="p-4 rounded-2xl bg-surface-container border border-outline-variant/30">
+                                    <p className="font-medium text-on-surface mb-1"><span className="font-bold">Servicio:</span> {b.message || 'Cuidado General'}</p>
+                                    <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Fecha del Servicio:</span> {new Date(b.start_datetime).toLocaleDateString()}</p>
+                                    <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Bloque Horario:</span> {new Date(b.start_datetime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {new Date(b.end_datetime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                                    <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Duración (Horas):</span> {b.total_hours}</p>
+                                    <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Número de niños:</span> {b.num_children}</p>
+                                    {pricePerChild && (
+                                        <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Precio por niño:</span> Bs. {pricePerChild}</p>
+                                    )}
+                                    {b.total_amount && (
+                                        <p className="text-sm text-on-surface-variant mb-1"><span className="font-bold">Costo total:</span> Bs. {b.total_amount}</p>
+                                    )}
+                                    {b.message && <p className="text-sm text-on-surface-variant"><span className="font-bold">Detalle:</span> {b.message}</p>}
                                 </div>
-                            ) : (
-                                <p className="text-on-surface-variant">No hay solicitudes pendientes.</p>
-                            )}
+                            );
+                        })
+                    ) : (
+                        <p className="text-on-surface-variant">No hay solicitudes pendientes.</p>
+                    )}
                         </GlassCard>
 
                         <GlassCard className="rounded-[40px] p-8 shadow-xl">
