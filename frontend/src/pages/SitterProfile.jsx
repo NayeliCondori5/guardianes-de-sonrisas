@@ -142,7 +142,7 @@ const SitterProfile = () => {
   }
         try {
             // Validate availability based on sitter's weekly schedule
-            const selectedDate = new Date(bookingForm.date);
+            const selectedDate = new Date(bookingForm.date + 'T00:00:00');
             const dayAbbr = DAYS_ABBR[selectedDate.getDay()]; // getDay: 0=Sunday
             const timeBlock = bookingForm.timeBlock;
             if (!sitter.availability?.[dayAbbr]?.[timeBlock]) {
