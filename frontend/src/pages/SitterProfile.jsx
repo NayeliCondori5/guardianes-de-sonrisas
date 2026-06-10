@@ -32,10 +32,21 @@ const SitterProfile = () => {
         date: '',
         timeBlock: 'manana',
         startTime: '',
-        hours: 4,
+        endTime: '',
         selectedServiceId: 'default',
         numChildren: 1
     });
+
+    const getCalculatedHours = () => {
+        if (!bookingForm.startTime || !bookingForm.endTime) return 0;
+        const [startH, startM] = bookingForm.startTime.split(':').map(Number);
+        const [endH, endM] = bookingForm.endTime.split(':').map(Number);
+        const diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+        const hrs = diffMinutes / 60;
+        return hrs > 0 ? Math.round(hrs * 10) / 10 : 0;
+    };
+
+    const calculatedHours = getCalculatedHours();
 
     useEffect(() => {
         const fetchSitterDetails = async () => {
@@ -123,7 +134,7 @@ const SitterProfile = () => {
             date: tomorrow.toISOString().split('T')[0],
             timeBlock: 'manana',
             startTime: TIME_BLOCK_START['manana'],
-            hours: 4,
+            endTime: TIME_BLOCK_END['manana'] || '12:00',
             selectedServiceId: 'default',
             numChildren: 1
         });
@@ -131,15 +142,24 @@ const SitterProfile = () => {
     };
 
     const submitBookingRequest = async () => {
-  if (bookingForm.hours > MAX_HOURS_PER_DAY) {
-    setModal({
-      isOpen: true,
-      title: 'Límite de horas',
-      message: `No puedes reservar más de ${MAX_HOURS_PER_DAY} horas por día.`,
-      type: 'error'
-    });
-    return;
-  }
+        if (calculatedHours <= 0) {
+            setModal({
+                isOpen: true,
+                title: 'Hora final inválida',
+                message: 'La hora final debe ser posterior a la hora de inicio.',
+                type: 'error'
+            });
+            return;
+        }
+        if (calculatedHours > MAX_HOURS_PER_DAY) {
+            setModal({
+                isOpen: true,
+                title: 'Límite de horas',
+                message: `No puedes reservar más de ${MAX_HOURS_PER_DAY} horas por día. Tu selección actual es de ${calculatedHours} horas.`,
+                type: 'error'
+            });
+            return;
+        }
         try {
             // Validate availability based on sitter's weekly schedule
             const selectedDate = new Date(bookingForm.date + 'T00:00:00');
@@ -164,12 +184,14 @@ const SitterProfile = () => {
                 ? `Servicio Especializado: ${activeService.title}` 
                 : 'Cuidado General';
             
-            // Build dynamic start and end datetime based on selected date, startTime, and duration hours
-            const startTimeStr = bookingForm.startTime || TIME_BLOCK_START[timeBlock] || '08:00';
+            // Build dynamic start and end datetime based on selected date, startTime, and endTime
+            const startTimeStr = bookingForm.startTime || '08:00';
+            const endTimeStr = bookingForm.endTime || '12:00';
             const start = `${bookingForm.date}T${startTimeStr}:00`;
+            const end = `${bookingForm.date}T${endTimeStr}:00`;
             const startDate = new Date(start);
-            const endDate = new Date(startDate.getTime() + bookingForm.hours * 60 * 60 * 1000);
-            const end = endDate.toISOString().slice(0,19);
+            const endDate = new Date(end);
+
             // Validate that end time does not exceed block end
             const blockEndStr = TIME_BLOCK_END[timeBlock] || '23:59';
             const blockEnd = new Date(`${bookingForm.date}T${blockEndStr}:00`);
@@ -177,7 +199,7 @@ const SitterProfile = () => {
                 setModal({
                     isOpen: true,
                     title: 'Horario excedido',
-                    message: `El servicio finaliza después de la franja ${timeBlock}. Por favor reduce la duración o elige otro bloque.`,
+                    message: `El servicio finaliza después de la franja ${timeBlock} (finaliza a las ${blockEndStr}). Por favor reduce la duración o elige otro bloque.`,
                     type: 'error'
                 });
                 return;
@@ -187,7 +209,7 @@ const SitterProfile = () => {
                  sitter_id: id,
                  start_datetime: start,
                  end_datetime: end,
-                 total_hours: bookingForm.hours,
+                 total_hours: calculatedHours,
                  num_children: bookingForm.numChildren,
                  message: message
              });
@@ -531,7 +553,15 @@ const SitterProfile = () => {
                                  <label className="block text-xs font-bold text-primary uppercase tracking-wider mb-2">Bloque Horario</label>
                                  <select
                                     value={bookingForm.timeBlock}
-                                    onChange={(e) => setBookingForm({ ...bookingForm, timeBlock: e.target.value, startTime: TIME_BLOCK_START[e.target.value] })}
+                                    onChange={(e) => {
+                                        const block = e.target.value;
+                                        setBookingForm({ 
+                                            ...bookingForm, 
+                                            timeBlock: block, 
+                                            startTime: TIME_BLOCK_START[block],
+                                            endTime: TIME_BLOCK_END[block]
+                                        });
+                                    }}
                                     className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
                                   >
                                     {Object.entries(sitter.availability?.[DAYS_ABBR[new Date(bookingForm.date).getDay()] ] || {}).map(([block, available]) => (
@@ -549,29 +579,37 @@ const SitterProfile = () => {
                                        value={bookingForm.startTime || ""}
                                        min={TIME_BLOCK_START[bookingForm.timeBlock]}
                                        max={TIME_BLOCK_END[bookingForm.timeBlock]}
-                                       onChange={(e) => setBookingForm({...bookingForm, startTime: e.target.value})}
+                                       onChange={(e) => {
+                                           const startVal = e.target.value;
+                                           let endVal = bookingForm.endTime;
+                                           if (startVal && endVal && startVal >= endVal) {
+                                               const [sh, sm] = startVal.split(':').map(Number);
+                                               const newEh = Math.min(23, sh + 2);
+                                               const newEhStr = String(newEh).padStart(2, '0');
+                                               const newEmStr = String(sm).padStart(2, '0');
+                                               endVal = `${newEhStr}:${newEmStr}`;
+                                           }
+                                           setBookingForm({...bookingForm, startTime: startVal, endTime: endVal});
+                                       }}
                                        className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
                                    />
                                </div>
 
-                            {/* Horas */}
-                            <div>
+                               <div className="mt-2">
+                                   <label className="block text-xs font-bold text-primary uppercase tracking-wider mb-2">Hora Final</label>
+                                   <input 
+                                       type="time" 
+                                       value={bookingForm.endTime || ""}
+                                       min={bookingForm.startTime}
+                                       max={TIME_BLOCK_END[bookingForm.timeBlock]}
+                                       onChange={(e) => setBookingForm({...bookingForm, endTime: e.target.value})}
+                                       className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
+                                   />
+                               </div>
+
+                            {/* Número de niños */}
+                            <div className="mt-4">
                                 <div className="flex justify-between items-center mb-2">
-                                    <label className="text-xs font-bold text-primary uppercase tracking-wider">
-                                        Duración (Horas)
-                                    </label>
-                                    <span className="text-sm font-bold text-primary">{bookingForm.hours} horas</span>
-                                </div>
-                                <input 
-                                    type="range"
-                                    min="1"
-                                    max="12"
-                                    value={bookingForm.hours}
-                                    onChange={(e) => setBookingForm({ ...bookingForm, hours: parseInt(e.target.value) })}
-                                    className="w-full accent-primary h-2 bg-outline-variant/30 rounded-lg appearance-none cursor-pointer"
-                                />
-                                {/* Número de niños */}
-                                <div className="flex justify-between items-center mt-2 mb-2">
                                     <label className="text-xs font-bold text-primary uppercase tracking-wider">
                                         Número de niños
                                     </label>
@@ -583,7 +621,7 @@ const SitterProfile = () => {
                                     max="5"
                                     value={bookingForm.numChildren}
                                     onChange={(e) => setBookingForm({ ...bookingForm, numChildren: Math.max(1, parseInt(e.target.value) || 1) })}
-                                    className="w-full p-2 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary"
+                                    className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
                                 />
                             </div>
 
@@ -600,7 +638,7 @@ const SitterProfile = () => {
                                 </div>
                                 <div className="flex justify-between items-center text-sm font-bold text-on-surface mb-2">
                                     <span>Horas contratadas:</span>
-                                    <span>{bookingForm.hours} horas</span>
+                                    <span>{calculatedHours} horas</span>
                                 </div>
                                 <div className="w-full h-px bg-outline-variant/20 my-2"></div>
                                 <div className="flex justify-between items-center text-lg font-bold text-dark">
@@ -609,11 +647,11 @@ const SitterProfile = () => {
                                         Bs. {(bookingForm.selectedServiceId === 'default' 
                                             ? sitter.rate 
                                             : sitterServices.find(s => s.id === bookingForm.selectedServiceId)?.rate || sitter.rate
-                                        ) * bookingForm.hours * bookingForm.numChildren}
+                                        ) * calculatedHours * bookingForm.numChildren}
                                     </span>
                                 </div>
                                 <p className="text-[10px] text-outline mt-2 italic">
-                                    Fin del servicio: {new Date(new Date(`${bookingForm.date}T${bookingForm.startTime}`).getTime() + (bookingForm.hours * 60 * 60 * 1000)).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                    Fin del servicio: {bookingForm.endTime}
                                 </p>
                             </div>
                          <AvailabilityCalendar availability={sitter.availability} />
