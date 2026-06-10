@@ -480,7 +480,7 @@ const SitterProfile = () => {
             
             {isBookingModalOpen && (
                 <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
-                    <GlassCard className="w-full max-w-md rounded-[32px] p-8 shadow-2xl relative animate-in zoom-in duration-300">
+                    <GlassCard className={`w-full max-w-md max-h-[90vh] overflow-y-auto rounded-[32px] p-8 shadow-2xl relative animate-in zoom-in duration-300`}>
                         <button 
                             onClick={() => setIsBookingModalOpen(false)}
                             className="absolute top-6 right-6 p-2 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-highest transition"

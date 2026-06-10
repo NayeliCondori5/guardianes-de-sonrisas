@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import Navbar from '../components/common/Navbar';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Star, ChevronLeft, ChevronRight, Quote } from 'lucide-react';
 
 const Home = () => {
     const [reviews, setReviews] = useState([]);
     const [activeIndex, setActiveIndex] = useState(0);
-
+    const [service, setService] = useState('');
+    const [location, setLocation] = useState('');
+    const navigate = useNavigate();
     const initialSeededReviews = [
         {
             id: 'seeded1',
@@ -80,18 +81,16 @@ const Home = () => {
                                 <div className="flex-1 flex items-center px-6 border-b md:border-b-0 md:border-r border-outline-variant/30">
                                     <div className="flex flex-col w-full py-2">
                                         <label className="font-label-sm text-xs font-bold text-outline uppercase tracking-wider mb-1">¿Qué servicio buscas?</label>
-                                        <input className="bg-transparent border-none p-0 focus:ring-0 text-on-surface placeholder:text-outline-variant font-body-md outline-none" placeholder="Ej: Cuidado infantil" type="text" />
+                                        <input className="bg-transparent border-none p-0 focus:ring-0 text-on-surface placeholder:text-outline-variant font-body-md outline-none" placeholder="Ej: Cuidado infantil" type="text" value={service} onChange={e => setService(e.target.value)} />
                                     </div>
                                 </div>
                                 <div className="flex-1 flex items-center px-6 border-b md:border-b-0 md:border-r border-outline-variant/30">
                                     <div className="flex flex-col w-full py-2">
                                         <label className="font-label-sm text-xs font-bold text-outline uppercase tracking-wider mb-1">Ubicación</label>
-                                        <input className="bg-transparent border-none p-0 focus:ring-0 text-on-surface placeholder:text-outline-variant font-body-md outline-none" placeholder="Ciudad o Zona" type="text" />
+                                        <input className="bg-transparent border-none p-0 focus:ring-0 text-on-surface placeholder:text-outline-variant font-body-md outline-none" placeholder="Ciudad o Zona" type="text" value={location} onChange={e => setLocation(e.target.value)} />
                                     </div>
                                 </div>
-                                <button className="bg-primary text-on-primary px-8 py-4 m-2 rounded-[24px] font-bold hover:bg-primary-container transition-colors shadow-md">
-                                    Buscar Ahora
-                                </button>
+                                <button onClick={() => navigate(`/search?service=${encodeURIComponent(service)}&location=${encodeURIComponent(location)}`)} className="bg-primary text-on-primary px-8 py-4 m-2 rounded-[24px] font-bold hover:bg-primary-container transition-colors shadow-md">Solicitar Niñero</button>
                             </div>
                         </div>
                         <div className="relative hidden lg:block">
