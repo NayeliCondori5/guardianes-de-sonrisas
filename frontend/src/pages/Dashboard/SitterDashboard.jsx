@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Navbar from '../../components/common/Navbar';
 import GlassCard from '../../components/common/GlassCard';
-import { Calendar, Clock, DollarSign, Star, Camera, Check, Eye, Trash2, Edit, AlertTriangle, MapPin, Briefcase, Plus, CalendarDays, User, ShieldCheck, Smartphone } from 'lucide-react';
+import { Calendar, Clock, DollarSign, Star, Camera, Check, Eye, Trash2, Edit, AlertTriangle, MapPin, Briefcase, Plus, CalendarDays, User, ShieldCheck, Smartphone, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CustomModal from '../../components/common/CustomModal';
 import api from '../../services/api';
