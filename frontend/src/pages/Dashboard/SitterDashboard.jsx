@@ -429,8 +429,8 @@ const SitterDashboard = () => {
                 setPhoneStep('confirm');
                 setModal({
                     isOpen: true,
-                    title: "Código Solicitado",
-                    message: "Se ha solicitado el código de verificación. Revise la consola del servidor backend.",
+                    title: "Código Enviado por SMS",
+                    message: "Se envió un código de verificación por mensaje de texto a tu número de teléfono. Ingrésalo a continuación.",
                     type: 'success'
                 });
             }
@@ -480,7 +480,7 @@ const SitterDashboard = () => {
                 setModal({
                     isOpen: true,
                     title: "Código Enviado",
-                    message: "Se ha enviado un código de verificación simulado. Revise la consola de desarrollo del servidor.",
+                    message: "Se envió un código de verificación a tu correo electrónico. Por favor revisa tu bandeja de entrada (y la carpeta de spam).",
                     type: 'success'
                 });
             }
