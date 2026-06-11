@@ -36,6 +36,7 @@ const SitterProfile = () => {
         selectedServiceId: 'default',
         numChildren: 1
     });
+    const [sitterOccupiedDates, setSitterOccupiedDates] = useState(new Set());
 
     const getCalculatedHours = () => {
         if (!bookingForm.startTime || !bookingForm.endTime) return 0;
@@ -138,6 +139,19 @@ const SitterProfile = () => {
             selectedServiceId: 'default',
             numChildren: 1
         });
+        // Cargar fechas ocupadas del cuidador
+        try {
+            const scheduleRes = await api.get(`/bookings/sitter/${id}/schedule`);
+            if (scheduleRes.data && scheduleRes.data.success) {
+                const occupied = new Set(
+                    scheduleRes.data.data.map(b => b.start_datetime ? b.start_datetime.split('T')[0] : '')
+                );
+                setSitterOccupiedDates(occupied);
+            }
+        } catch(err) {
+            // Si falla, simplemente no se muestra advertencia
+            setSitterOccupiedDates(new Set());
+        }
         setIsBookingModalOpen(true);
     };
 
@@ -170,6 +184,17 @@ const SitterProfile = () => {
                     isOpen: true,
                     title: "Horario no disponible",
                     message: `El cuidador no está disponible el ${dayAbbr} en la franja ${timeBlock}. Por favor elige otro día u hora.`,
+                    type: 'error'
+                });
+                return;
+            }
+
+            // Verificar si el cuidador ya tiene una reserva aceptada ese día
+            if (sitterOccupiedDates.has(bookingForm.date)) {
+                setModal({
+                    isOpen: true,
+                    title: "Día no disponible",
+                    message: `El cuidador ya tiene un compromiso agendado para el ${bookingForm.date}. Por favor elige otro día.`,
                     type: 'error'
                 });
                 return;
@@ -546,9 +571,19 @@ const SitterProfile = () => {
                                    type="date"
                                    value={bookingForm.date}
                                    onChange={(e) => setBookingForm({ ...bookingForm, date: e.target.value })}
-                                   className="w-full p-3 bg-surface-container text-on-surface border border-outline-variant/30 rounded-2xl focus:outline-none focus:border-primary font-medium"
+                                   className={`w-full p-3 bg-surface-container text-on-surface border rounded-2xl focus:outline-none font-medium ${
+                                       bookingForm.date && sitterOccupiedDates.has(bookingForm.date)
+                                           ? 'border-error focus:border-error bg-error-container/20'
+                                           : 'border-outline-variant/30 focus:border-primary'
+                                   }`}
                                  />
+                                 {bookingForm.date && sitterOccupiedDates.has(bookingForm.date) && (
+                                     <p className="mt-1.5 text-xs text-error font-bold flex items-center gap-1">
+                                         ⚠️ Este día ya está ocupado. Por favor elige otro día.
+                                     </p>
+                                 )}
                                </div>
+
                                <div className="mt-2">
                                  <label className="block text-xs font-bold text-primary uppercase tracking-wider mb-2">Bloque Horario</label>
                                  <select

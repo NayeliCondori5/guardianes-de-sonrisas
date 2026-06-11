@@ -51,6 +51,24 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 });
 
+// GET /api/bookings/sitter/:sitterId/schedule - Obtiene fechas ocupadas de un cuidador (público)
+router.get('/sitter/:sitterId/schedule', async (req, res) => {
+    try {
+        const { sitterId } = req.params;
+        const { rows: bookings } = await db.query(`
+            SELECT id, start_datetime, end_datetime, status
+            FROM bookings
+            WHERE sitter_id = $1
+              AND status IN ('accepted', 'awaiting_payment', 'confirmed', 'completed')
+            ORDER BY start_datetime ASC
+        `, [sitterId]);
+        res.json({ success: true, data: bookings });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Error interno' });
+    }
+});
+
 router.get('/my', authenticateToken, async (req, res) => {
     try {
         let query;

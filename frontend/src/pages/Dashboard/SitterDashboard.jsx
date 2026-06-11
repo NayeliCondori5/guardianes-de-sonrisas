@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Navbar from '../../components/common/Navbar';
 import GlassCard from '../../components/common/GlassCard';
-import { Calendar, Clock, DollarSign, Star, Camera, Check, Eye, Trash2, Edit, AlertTriangle, MapPin, Briefcase, Plus } from 'lucide-react';
+import { Calendar, Clock, DollarSign, Star, Camera, Check, Eye, Trash2, Edit, AlertTriangle, MapPin, Briefcase, Plus, CalendarDays, User } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CustomModal from '../../components/common/CustomModal';
 import api from '../../services/api';
@@ -11,7 +11,9 @@ const SitterDashboard = () => {
     const { user, logout } = useAuth();
     const [activeTab, setActiveTab] = useState('requests');
     const [requests, setRequests] = useState([]);
+    const [acceptedBookings, setAcceptedBookings] = useState([]);
     const [earnings, setEarnings] = useState(0);
+    const [agendaCurrentMonth, setAgendaCurrentMonth] = useState(new Date());
     const [modal, setModal] = useState({ isOpen: false, title: '', message: '', type: 'success' });
     const [isEditingProfile, setIsEditingProfile] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -126,6 +128,8 @@ const SitterDashboard = () => {
                         sitterId: b.sitter_id,
                         status: status,
                         date: b.start_datetime ? b.start_datetime.split('T')[0] : '',
+                        startDatetime: b.start_datetime,
+                        endDatetime: b.end_datetime,
                         hours: b.total_hours,
                         total: b.total_amount,
                         serviceTitle: b.message || 'Cuidado General',
@@ -133,6 +137,12 @@ const SitterDashboard = () => {
                 });
                 setRequests(mappedReqs);
                 
+                // Reservas aceptadas/confirmadas para la agenda
+                const accepted = mappedReqs.filter(r =>
+                    ['ACEPTADA', 'PAGADO', 'CONFIRMADO'].includes(r.status)
+                );
+                setAcceptedBookings(accepted);
+
                 const completed = mappedReqs.filter(r => r.status === 'COMPLETADO' || r.status === 'CONFIRMADO');
                 const total = completed.reduce((acc, r) => acc + (r.total * 0.9), 0);
                 setEarnings(total);
@@ -350,6 +360,7 @@ const SitterDashboard = () => {
                         </div>
                         <nav className="flex flex-col gap-2">
                             <button onClick={() => setActiveTab('requests')} className={`flex items-center gap-3 p-3 rounded-xl transition-all font-bold ${activeTab === 'requests' ? 'bg-primary text-white shadow-md' : 'hover:bg-surface-container'}`}><Calendar size={20} /> Solicitudes</button>
+                            <button onClick={() => setActiveTab('agenda')} className={`flex items-center gap-3 p-3 rounded-xl transition-all font-bold ${activeTab === 'agenda' ? 'bg-primary text-white shadow-md' : 'hover:bg-surface-container'}`}><CalendarDays size={20} /> Mi Agenda</button>
                             <button onClick={() => setActiveTab('earnings')} className={`flex items-center gap-3 p-3 rounded-xl transition-all font-bold ${activeTab === 'earnings' ? 'bg-primary text-white shadow-md' : 'hover:bg-surface-container'}`}><DollarSign size={20} /> Ganancias</button>
                             <button onClick={() => setActiveTab('profile')} className={`flex items-center gap-3 p-3 rounded-xl transition-all font-bold ${activeTab === 'profile' ? 'bg-primary text-white shadow-md' : 'hover:bg-surface-container'}`}><Star size={20} /> Mi Perfil Profesional</button>
                             <button onClick={() => setActiveTab('services')} className={`flex items-center gap-3 p-3 rounded-xl transition-all font-bold ${activeTab === 'services' ? 'bg-primary text-white shadow-md' : 'hover:bg-surface-container'}`}><Briefcase size={20} /> Mis Servicios</button>
@@ -394,6 +405,139 @@ const SitterDashboard = () => {
                             </div>
                         </div>
                     )}
+
+                    {activeTab === 'agenda' && (() => {
+                        const year = agendaCurrentMonth.getFullYear();
+                        const month = agendaCurrentMonth.getMonth();
+                        const monthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                        const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+                        const firstDay = new Date(year, month, 1).getDay();
+                        const daysInMonth = new Date(year, month + 1, 0).getDate();
+                        const today = new Date();
+
+                        const occupiedDates = new Set(
+                            acceptedBookings.map(b => b.date)
+                        );
+
+                        const cells = [];
+                        for (let i = 0; i < firstDay; i++) cells.push(null);
+                        for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+                        const statusColors = {
+                            'ACEPTADA': 'bg-blue-500',
+                            'PAGADO': 'bg-yellow-500',
+                            'CONFIRMADO': 'bg-green-500',
+                        };
+                        const statusLabels = {
+                            'ACEPTADA': 'Aceptada',
+                            'PAGADO': 'Pago Recibido',
+                            'CONFIRMADO': 'Confirmado',
+                        };
+
+                        return (
+                        <div>
+                            <h2 className="font-display-lg text-3xl font-bold text-primary mb-2">Mi Agenda</h2>
+                            <p className="text-on-surface-variant text-sm mb-6">Visualiza todos tus compromisos aceptados. Los días marcados están ocupados.</p>
+
+                            {/* Calendario */}
+                            <GlassCard className="rounded-[24px] p-6 shadow-md mb-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <button
+                                        onClick={() => setAgendaCurrentMonth(new Date(year, month - 1, 1))}
+                                        className="p-2 rounded-full hover:bg-surface-container transition font-bold text-primary"
+                                    >&lt;</button>
+                                    <h3 className="font-display-lg text-xl font-bold">{monthNames[month]} {year}</h3>
+                                    <button
+                                        onClick={() => setAgendaCurrentMonth(new Date(year, month + 1, 1))}
+                                        className="p-2 rounded-full hover:bg-surface-container transition font-bold text-primary"
+                                    >&gt;</button>
+                                </div>
+                                <div className="grid grid-cols-7 gap-1 mb-2">
+                                    {dayNames.map(d => (
+                                        <div key={d} className="text-center text-xs font-bold text-on-surface-variant uppercase py-1">{d}</div>
+                                    ))}
+                                </div>
+                                <div className="grid grid-cols-7 gap-1">
+                                    {cells.map((day, idx) => {
+                                        if (!day) return <div key={`empty-${idx}`} />;
+                                        const dateStr = `${year}-${String(month + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                                        const isOccupied = occupiedDates.has(dateStr);
+                                        const isToday = today.getDate() === day && today.getMonth() === month && today.getFullYear() === year;
+                                        return (
+                                            <div
+                                                key={day}
+                                                className={`relative aspect-square flex items-center justify-center rounded-xl text-sm font-bold transition-all
+                                                    ${isOccupied ? 'bg-primary text-white shadow-md scale-105' : ''}
+                                                    ${isToday && !isOccupied ? 'border-2 border-primary text-primary' : ''}
+                                                    ${!isOccupied && !isToday ? 'text-on-surface hover:bg-surface-container' : ''}
+                                                `}
+                                                title={isOccupied ? 'Día ocupado' : ''}
+                                            >
+                                                {day}
+                                                {isOccupied && (
+                                                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-white rounded-full"></span>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div className="flex items-center gap-4 mt-4 pt-4 border-t border-outline-variant/20 text-xs text-on-surface-variant">
+                                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-primary inline-block"></span> Día ocupado</span>
+                                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full border-2 border-primary inline-block"></span> Hoy</span>
+                                </div>
+                            </GlassCard>
+
+                            {/* Lista de compromisos */}
+                            <h3 className="font-display-lg text-xl font-bold mb-4">Próximos Compromisos</h3>
+                            {acceptedBookings.length > 0 ? (
+                                <div className="space-y-3">
+                                    {acceptedBookings
+                                        .filter(b => new Date(b.date) >= new Date(today.toISOString().split('T')[0]))
+                                        .sort((a,b) => new Date(a.date) - new Date(b.date))
+                                        .map(booking => {
+                                            const startTime = booking.startDatetime ? new Date(booking.startDatetime).toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}) : '--';
+                                            const endTime = booking.endDatetime ? new Date(booking.endDatetime).toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}) : '--';
+                                            const colorClass = statusColors[booking.status] || 'bg-gray-400';
+                                            const label = statusLabels[booking.status] || booking.status;
+                                            return (
+                                                <GlassCard key={booking.id} className="rounded-[20px] p-5 shadow-sm hover:shadow-md transition-shadow">
+                                                    <div className="flex items-start gap-4">
+                                                        <div className={`${colorClass} text-white rounded-2xl p-3 flex-shrink-0 flex flex-col items-center min-w-[56px]`}>
+                                                            <span className="text-xs font-bold uppercase">{new Date(booking.date + 'T00:00:00').toLocaleDateString('es-ES', {month:'short'})}</span>
+                                                            <span className="text-2xl font-bold leading-none">{new Date(booking.date + 'T00:00:00').getDate()}</span>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center justify-between gap-2 mb-1">
+                                                                <h4 className="font-bold text-base">{booking.serviceTitle}</h4>
+                                                                <span className={`text-xs font-bold px-2.5 py-1 rounded-full text-white ${colorClass}`}>{label}</span>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-3 text-sm text-on-surface-variant">
+                                                                <span className="flex items-center gap-1"><User size={14} className="text-primary"/> {booking.parentName}</span>
+                                                                <span className="flex items-center gap-1"><Clock size={14} className="text-primary"/> {startTime} – {endTime}</span>
+                                                                <span className="flex items-center gap-1 font-bold text-primary">Bs. {Number(booking.total || 0).toFixed(2)}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </GlassCard>
+                                            );
+                                        })
+                                    }
+                                    {acceptedBookings.filter(b => new Date(b.date) >= new Date(today.toISOString().split('T')[0])).length === 0 && (
+                                        <p className="text-on-surface-variant text-sm">No tienes compromisos futuros programados.</p>
+                                    )}
+                                </div>
+                            ) : (
+                                <GlassCard className="rounded-[24px] p-10 text-center shadow-sm">
+                                    <div className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
+                                        <CalendarDays size={28} />
+                                    </div>
+                                    <p className="font-bold text-lg">Tu agenda está vacía</p>
+                                    <p className="text-on-surface-variant text-sm mt-2 max-w-xs mx-auto">Cuando aceptes solicitudes de los padres, aparecerán aquí como compromisos programados.</p>
+                                </GlassCard>
+                            )}
+                        </div>
+                        );
+                    })()}
 
                     {activeTab === 'earnings' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
