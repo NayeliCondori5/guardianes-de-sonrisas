@@ -53,15 +53,22 @@ const db = {
             CREATE TABLE IF NOT EXISTS verification_log (
                 id TEXT PRIMARY KEY,
                 user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
-                type TEXT CHECK(type IN ('identity','email','phone')),
+                type TEXT,
                 method TEXT,
                 confidence_score REAL,
-                status TEXT CHECK(status IN ('pending','approved','rejected')),
+                is_match INTEGER DEFAULT 0,
+                status TEXT,
                 ip_address TEXT,
+                verified_at TEXT,
+                provider TEXT,
                 created_at TEXT
             );
         `);
         await pool.query('CREATE INDEX IF NOT EXISTS idx_verification_log_user ON verification_log(user_id);');
+        // Migraciones adicionales para columnas que pudieran no existir en tablas ya creadas
+        await pool.query('ALTER TABLE verification_log ADD COLUMN IF NOT EXISTS is_match INTEGER DEFAULT 0;');
+        await pool.query('ALTER TABLE verification_log ADD COLUMN IF NOT EXISTS verified_at TEXT;');
+        await pool.query('ALTER TABLE verification_log ADD COLUMN IF NOT EXISTS provider TEXT;');
         console.log('PostgreSQL: migración de columnas y tablas de verificación completada.');
     } catch (err) {
         console.error('Error inicializando esquema o migraciones PostgreSQL:', err);
