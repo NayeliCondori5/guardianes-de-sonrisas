@@ -33,6 +33,63 @@ const ParentDashboard = () => {
     const [twoFactorSecret, setTwoFactorSecret] = useState('');
     const [twoFactorCodeInput, setTwoFactorCodeInput] = useState('');
     const [twoFactorPasswordInput, setTwoFactorPasswordInput] = useState('');
+
+    const [identityVerified, setIdentityVerified] = useState(0);
+    const [identityVerifiedAt, setIdentityVerifiedAt] = useState('');
+    const [identityLoading, setIdentityLoading] = useState(false);
+    const [documentFile, setDocumentFile] = useState(null);
+    const [selfieFile, setSelfieFile] = useState(null);
+    const [identityConfidence, setIdentityConfidence] = useState(null);
+
+    const handleIdentityUpload = async (e) => {
+        e.preventDefault();
+        if (!documentFile || !selfieFile) {
+            setModal({
+                isOpen: true,
+                title: "Archivos Faltantes",
+                message: "Por favor selecciona tanto la foto de tu documento oficial como tu foto selfie.",
+                type: 'error'
+            });
+            return;
+        }
+
+        setIdentityLoading(true);
+        const formData = new FormData();
+        formData.append('document', documentFile);
+        formData.append('selfie', selfieFile);
+
+        try {
+            const response = await api.post('/users/verify-identity/upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            
+            if (response.data && response.data.success) {
+                setIdentityVerified(1);
+                setIdentityConfidence(response.data.confidence);
+                setModal({
+                    isOpen: true,
+                    title: "¡Identidad Verificada!",
+                    message: `Verificación biométrica exitosa. Coincidencia del ${(response.data.confidence * 100).toFixed(1)}%. Tu cuenta ahora cuenta con el distintivo de identidad verificada.`,
+                    type: 'success'
+                });
+                loadProfile();
+            }
+        } catch (err) {
+            console.error(err);
+            const errMsg = err.response?.data?.message || "La comparación facial falló. Asegúrate de que las fotos sean claras y correspondan a la misma persona.";
+            setModal({
+                isOpen: true,
+                title: "Verificación Fallida",
+                message: errMsg,
+                type: 'error'
+            });
+        } finally {
+            setIdentityLoading(false);
+            setDocumentFile(null);
+            setSelfieFile(null);
+        }
+    };
+
     const [profileForm, setProfileForm] = useState({
         full_name: '',
         city: '',
@@ -79,6 +136,8 @@ const ParentDashboard = () => {
                 setPhoneVerified(dbUser.phone_verified || 0);
                 setEmailVerified(dbUser.email_verified || 0);
                 setTwoFactorEnabled(dbUser.two_factor_enabled || 0);
+                setIdentityVerified(dbUser.identity_verified || 0);
+                setIdentityVerifiedAt(dbUser.identity_verified_at || '');
             }
         } catch (err) {
             console.error('Error loading parent profile:', err);
@@ -983,6 +1042,75 @@ const ParentDashboard = () => {
                                         >
                                             Configurar 2FA
                                         </button>
+                                    )}
+                                </GlassCard>
+
+                                <GlassCard className="rounded-[32px] p-8 shadow-md lg:col-span-2">
+                                    <div className="flex justify-between items-start gap-4 mb-4">
+                                        <h3 className="font-display-lg text-xl font-bold flex items-center gap-2">
+                                            <ShieldCheck className="text-primary" size={20} /> Verificación Biométrica de Identidad
+                                        </h3>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                                            identityVerified ? 'bg-green-100 text-green-700' : 'bg-surface-container text-on-surface-variant'
+                                        }`}>
+                                            {identityVerified ? 'Verificado' : 'Sin Verificar'}
+                                        </span>
+                                    </div>
+                                    <p className="text-sm text-on-surface-variant mb-6 leading-relaxed font-body-sm">
+                                        Sube una foto de tu documento oficial (Cédula de Identidad o Pasaporte) y una selfie para realizar la comprobación facial biométrica por seguridad.
+                                    </p>
+
+                                    {identityVerified ? (
+                                        <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded-2xl text-sm space-y-2">
+                                            <div className="flex gap-2">
+                                                <Check size={16} className="text-green-600 shrink-0 mt-0.5" />
+                                                <span className="font-semibold">¡Identidad oficial verificada biométricamente!</span>
+                                            </div>
+                                            {identityVerifiedAt && (
+                                                <p className="text-xs text-green-700 ml-6">
+                                                    Verificado el: {new Date(identityVerifiedAt).toLocaleString()}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <form onSubmit={handleIdentityUpload} className="space-y-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="flex flex-col gap-1.5">
+                                                    <label className="block text-xs font-bold text-outline uppercase">Foto del Documento Oficial:</label>
+                                                    <input 
+                                                        type="file" 
+                                                        required
+                                                        accept="image/*"
+                                                        onChange={(e) => setDocumentFile(e.target.files[0])}
+                                                        className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl text-xs w-full focus:outline-none focus:border-primary"
+                                                    />
+                                                </div>
+                                                <div className="flex flex-col gap-1.5">
+                                                    <label className="block text-xs font-bold text-outline uppercase">Foto Selfie de Rostro:</label>
+                                                    <input 
+                                                        type="file" 
+                                                        required
+                                                        accept="image/*"
+                                                        onChange={(e) => setSelfieFile(e.target.files[0])}
+                                                        className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl text-xs w-full focus:outline-none focus:border-primary"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <button 
+                                                type="submit" 
+                                                disabled={identityLoading}
+                                                className={`bg-primary text-white px-8 py-3.5 rounded-full font-bold shadow-md hover:bg-primary-container transition flex items-center justify-center gap-2 ${
+                                                    identityLoading ? 'opacity-70 cursor-not-allowed' : ''
+                                                }`}
+                                            >
+                                                {identityLoading ? (
+                                                    <>
+                                                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                                                        Comparando rostros con Azure Face API...
+                                                    </>
+                                                ) : 'Iniciar Verificación Facial'}
+                                            </button>
+                                        </form>
                                     )}
                                 </GlassCard>
                             </div>

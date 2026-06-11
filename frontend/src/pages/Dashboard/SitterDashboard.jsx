@@ -25,6 +25,7 @@ const SitterDashboard = () => {
     const [documentFile, setDocumentFile] = useState(null);
     const [selfieFile, setSelfieFile] = useState(null);
     const [isUploadingDocs, setIsUploadingDocs] = useState(false);
+    const [identityConfidence, setIdentityConfidence] = useState(null);
 
     // Phone verification
     const [phoneInput, setPhoneInput] = useState(user?.phone || '');
@@ -384,27 +385,29 @@ const SitterDashboard = () => {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             if (response.data && response.data.success) {
-                setIdentityStatus('pending');
-                setDocumentUrl(response.data.data.document_url);
-                setSelfieUrl(response.data.data.selfie_url);
+                setIdentityStatus('verified');
+                setIdentityConfidence(response.data.confidence);
                 setModal({
                     isOpen: true,
-                    title: "Documentos Enviados",
-                    message: "Tus documentos han sido subidos con éxito y están en revisión por el administrador.",
+                    title: "¡Identidad Verificada!",
+                    message: `Verificación biométrica exitosa. Coincidencia de rostros del ${(response.data.confidence * 100).toFixed(1)}%. Tu cuenta ahora cuenta con el distintivo de identidad verificada.`,
                     type: 'success'
                 });
             }
         } catch (err) {
-            console.error('Error al subir documentos de identidad:', err);
-            const errMsg = err.response?.data?.message || "No se pudieron subir los documentos. Intenta de nuevo.";
+            console.error('Error al verificar identidad:', err);
+            const errMsg = err.response?.data?.message || "La comparación facial falló. Asegúrate de que las fotos sean claras y correspondan a la misma persona.";
             setModal({
                 isOpen: true,
-                title: "Error de Subida",
+                title: "Verificación Fallida",
                 message: errMsg,
                 type: 'error'
             });
+            setIdentityStatus('rejected');
         } finally {
             setIsUploadingDocs(false);
+            setDocumentFile(null);
+            setSelfieFile(null);
         }
     };
 
@@ -1312,14 +1315,17 @@ const SitterDashboard = () => {
                                             </span>
                                         </div>
                                         <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
-                                            Sube una foto de tu documento oficial (Cédula de Identidad, DNI o Pasaporte) y una selfie clara con buena iluminación. Nuestro equipo validará los datos de forma manual.
+                                            Sube una foto de tu documento oficial (Cédula de Identidad, DNI o Pasaporte) y una selfie clara con buena iluminación. La verificación se procesará de forma automática mediante comparación facial biométrica.
                                         </p>
 
                                         {identityStatus === 'verified' && (
-                                            <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded-2xl text-xs flex gap-2 mb-6">
-                                                <Check size={16} className="shrink-0 text-green-600 mt-0.5" />
-                                                <p>
-                                                    <strong>Identidad Verificada:</strong> Tu cuenta cuenta con la insignia de identidad oficial. Las fotos de tus documentos se han eliminado permanentemente de nuestros servidores para proteger tu privacidad.
+                                            <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded-2xl text-sm space-y-2 mb-6">
+                                                <div className="flex gap-2">
+                                                    <Check size={16} className="shrink-0 text-green-600 mt-0.5" />
+                                                    <span className="font-semibold">¡Identidad oficial verificada biométricamente!</span>
+                                                </div>
+                                                <p className="text-xs text-green-700 ml-6">
+                                                    Las fotos de tus documentos se han eliminado permanentemente de nuestros servidores para proteger tu privacidad.
                                                 </p>
                                             </div>
                                         )}
@@ -1328,7 +1334,7 @@ const SitterDashboard = () => {
                                             <div className="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl text-xs flex gap-2 mb-6">
                                                 <AlertTriangle size={16} className="shrink-0 text-amber-600 mt-0.5" />
                                                 <p>
-                                                    <strong>Documentos en revisión:</strong> Tus archivos están siendo validados por nuestro equipo. No es necesario realizar ninguna acción por el momento.
+                                                    <strong>Documentos en revisión:</strong> Tus archivos están siendo validados. No es necesario realizar ninguna acción por el momento.
                                                 </p>
                                             </div>
                                         )}
@@ -1337,21 +1343,21 @@ const SitterDashboard = () => {
                                             <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-2xl text-xs flex gap-2 mb-6">
                                                 <AlertTriangle size={16} className="shrink-0 text-red-600 mt-0.5" />
                                                 <p>
-                                                    <strong>Verificación rechazada:</strong> Los documentos anteriores fueron rechazados por el administrador (no legibles o datos no coincidentes). Por favor, sube archivos nuevos de buena calidad.
+                                                    <strong>Verificación rechazada:</strong> La comparación facial falló o los archivos no eran legibles. Por favor, sube fotos nuevas y claras.
                                                 </p>
                                             </div>
                                         )}
 
-                                        {(identityStatus === 'none' || identityStatus === 'rejected') && (
+                                        {(identityStatus === 'none' || identityStatus === 'rejected' || identityStatus === 'pending') && (
                                             <form onSubmit={handleIdentityUpload} className="space-y-4">
                                                 <div>
                                                     <label className="block text-xs font-bold mb-2 uppercase text-outline">1. Foto del Documento de Identidad (DNI/Cédula/Pasaporte)</label>
                                                     <input 
                                                         type="file" 
                                                         required
-                                                        accept="image/*,application/pdf"
+                                                        accept="image/*"
                                                         onChange={(e) => setDocumentFile(e.target.files[0])}
-                                                        className="w-full text-sm text-on-surface file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                                                        className="w-full text-xs text-on-surface file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                                                     />
                                                 </div>
                                                 <div>
@@ -1361,15 +1367,20 @@ const SitterDashboard = () => {
                                                         required
                                                         accept="image/*"
                                                         onChange={(e) => setSelfieFile(e.target.files[0])}
-                                                        className="w-full text-sm text-on-surface file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                                                        className="w-full text-xs text-on-surface file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                                                     />
                                                 </div>
                                                 <button 
                                                     type="submit" 
                                                     disabled={isUploadingDocs}
-                                                    className="w-full bg-primary text-white py-3.5 rounded-full font-bold shadow-md hover:bg-primary-container transition active:scale-95 text-sm disabled:opacity-50 mt-4"
+                                                    className="w-full bg-primary text-white py-3.5 rounded-full font-bold shadow-md hover:bg-primary-container transition active:scale-95 text-xs disabled:opacity-50 mt-4 flex items-center justify-center gap-2"
                                                 >
-                                                    {isUploadingDocs ? 'Subiendo archivos...' : 'Enviar para Verificación'}
+                                                    {isUploadingDocs ? (
+                                                        <>
+                                                            <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                                                            Procesando comparación biométrica...
+                                                        </>
+                                                    ) : 'Iniciar Verificación Facial'}
                                                 </button>
                                             </form>
                                         )}

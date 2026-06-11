@@ -8,10 +8,46 @@ const qrcode = require('qrcode');
 const { encrypt, decrypt } = require('../utils/encryption');
 const { otpRateLimiter } = require('../middleware/rateLimiter');
 
+const emailService = require('../services/emailService');
+const smsService = require('../services/smsService');
+const faceVerificationService = require('../services/faceVerificationService');
+const fs = require('fs');
+const multer = require('multer');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+
+const tempUploadsDir = './uploads/temp-verify';
+if (!fs.existsSync(tempUploadsDir)) {
+    fs.mkdirSync(tempUploadsDir, { recursive: true });
+}
+
+const tempDiskStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, tempUploadsDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'verify-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const tempUpload = multer({
+    storage: tempDiskStorage,
+    fileFilter: (req, file, cb) => {
+        const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+        if (allowedMimes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Tipo de archivo no soportado. Por favor use JPG, JPEG o PNG para verificación facial.'), false);
+        }
+    }
+});
+
+
 // GET /api/users/profile -> mi perfil
 router.get('/profile', authenticateToken, async (req, res) => {
     try {
-        const { rows: userRows } = await db.query('SELECT id, email, role, full_name, phone, avatar_url, city, is_active, email_verified, phone_verified, two_factor_enabled FROM users WHERE id = $1', [req.user.id]);
+        const { rows: userRows } = await db.query('SELECT id, email, role, full_name, phone, avatar_url, city, is_active, email_verified, phone_verified, two_factor_enabled, identity_verified, identity_verified_at FROM users WHERE id = $1', [req.user.id]);
         const user = userRows.length > 0 ? userRows[0] : null;
         if (!user) return res.status(404).json({ success: false, message: 'Usuario no encontrado' });
 
@@ -245,20 +281,20 @@ router.delete('/account', authenticateToken, async (req, res) => {
     }
 });
 
-// Almacén en memoria simple para códigos de verificación (mock)
+// Almacén en memoria simple para códigos de verificación (mock/real)
 const verificationCodes = new Map();
 
-// POST /api/users/verify-identity/upload -> subir documentos para verificación
-router.post('/verify-identity/upload', authenticateToken, (req, res, next) => {
-    if (req.user.role !== 'sitter') {
-        return res.status(403).json({ success: false, message: 'Solo cuidadores pueden verificar su identidad oficial.' });
+// POST /api/users/verify-identity/upload -> subir documentos para verificación biométrica
+router.post('/verify-identity/upload', authenticateToken, (req, res) => {
+    if (req.user.role !== 'parent' && req.user.role !== 'sitter') {
+        return res.status(403).json({ success: false, message: 'No autorizado para verificar identidad.' });
     }
-    
-    const fieldsUpload = upload.fields([
+
+    const fieldsUpload = tempUpload.fields([
         { name: 'document', maxCount: 1 },
         { name: 'selfie', maxCount: 1 }
     ]);
-    
+
     fieldsUpload(req, res, async (err) => {
         if (err) {
             console.error("Error al subir documentos:", err);
@@ -267,45 +303,83 @@ router.post('/verify-identity/upload', authenticateToken, (req, res, next) => {
                 message: `Error al subir archivos: ${err.message || err.toString()}` 
             });
         }
-        
+
         if (!req.files || !req.files['document'] || !req.files['selfie']) {
             return res.status(400).json({ success: false, message: 'Debe subir tanto la foto del documento como la selfie de validación.' });
         }
-        
+
+        const documentFile = req.files['document'][0];
+        const selfieFile = req.files['selfie'][0];
+        const docPath = documentFile.path;
+        const selfiePath = selfieFile.path;
+
         try {
-            const documentFile = req.files['document'][0];
-            const selfieFile = req.files['selfie'][0];
-            
-            let documentUrl = documentFile.path;
-            let selfieUrl = selfieFile.path;
-            
-            const host = req.get('host');
-            const protocol = req.protocol;
-            if (documentUrl && !documentUrl.startsWith('http://') && !documentUrl.startsWith('https://')) {
-                documentUrl = `${protocol}://${host}/uploads/${documentFile.filename}`;
-            }
-            if (selfieUrl && !selfieUrl.startsWith('http://') && !selfieUrl.startsWith('https://')) {
-                selfieUrl = `${protocol}://${host}/uploads/${selfieFile.filename}`;
-            }
-            
-            await db.query(`
-                UPDATE sitters 
-                SET identity_status = 'pending', document_url = $1, selfie_url = $2 
-                WHERE user_id = $3
-            `, [documentUrl, selfieUrl, req.user.id]);
-            
-            res.json({ 
-                success: true, 
-                message: 'Documentos subidos con éxito. Su identidad está en proceso de verificación.',
-                data: {
-                    document_url: documentUrl,
-                    selfie_url: selfieUrl,
-                    identity_status: 'pending'
+            console.log(`[IDENTITY] Procesando comparación facial para usuario: ${req.user.id}`);
+            const result = await faceVerificationService.compareFaces(docPath, selfiePath);
+
+            const ipAddress = req.ip || req.connection.remoteAddress;
+            const logId = uuidv4();
+
+            if (result.isMatch && result.confidence >= 0.85) {
+                // Marcar como verificado en la tabla de usuarios
+                await db.query(
+                    'UPDATE users SET identity_verified = 1, identity_verified_at = $1, updated_at = $1 WHERE id = $2',
+                    [new Date().toISOString(), req.user.id]
+                );
+
+                // Si es sitter, también actualizamos su campo identity_status a 'verified'
+                if (req.user.role === 'sitter') {
+                    await db.query(
+                        "UPDATE sitters SET identity_status = 'verified' WHERE user_id = $1",
+                        [req.user.id]
+                    );
                 }
-            });
-        } catch (dbErr) {
-            console.error("Error en DB al guardar verificación de identidad:", dbErr);
-            res.status(500).json({ success: false, message: 'Error interno al procesar la solicitud en base de datos.' });
+
+                // Registrar en verification_log
+                await db.query(`
+                    INSERT INTO verification_log (id, user_id, type, method, confidence_score, status, ip_address, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                `, [logId, req.user.id, 'identity', result.mock ? 'mock' : 'azure_face', result.confidence, 'approved', ipAddress, new Date().toISOString()]);
+
+                res.json({
+                    success: true,
+                    message: 'Identidad verificada exitosamente con biometría facial.',
+                    confidence: result.confidence,
+                    isMatch: true,
+                    status: 'approved'
+                });
+            } else {
+                // Registrar en verification_log
+                await db.query(`
+                    INSERT INTO verification_log (id, user_id, type, method, confidence_score, status, ip_address, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                `, [logId, req.user.id, 'identity', result.mock ? 'mock' : 'azure_face', result.confidence, 'rejected', ipAddress, new Date().toISOString()]);
+
+                res.status(400).json({
+                    success: false,
+                    message: `La verificación facial falló. Coincidencia de rostros insuficiente (${(result.confidence * 100).toFixed(1)}%). Requerido >= 85%.`,
+                    confidence: result.confidence,
+                    isMatch: false,
+                    status: 'rejected'
+                });
+            }
+        } catch (procErr) {
+            console.error("Error al procesar verificación facial:", procErr);
+            res.status(500).json({ success: false, message: `Error al procesar verificación: ${procErr.message}` });
+        } finally {
+            // ELIMINACIÓN SEGURA: eliminar imágenes del disco al terminar
+            try {
+                if (fs.existsSync(docPath)) {
+                    fs.unlinkSync(docPath);
+                    console.log(`[IDENTITY] Documento eliminado temporalmente de: ${docPath}`);
+                }
+                if (fs.existsSync(selfiePath)) {
+                    fs.unlinkSync(selfiePath);
+                    console.log(`[IDENTITY] Selfie eliminada temporalmente de: ${selfiePath}`);
+                }
+            } catch (cleanupErr) {
+                console.error("Error al limpiar archivos temporales de verificación:", cleanupErr);
+            }
         }
     });
 });
@@ -321,14 +395,18 @@ router.post('/verify-phone/request', authenticateToken, otpRateLimiter, async (r
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         verificationCodes.set(`phone:${req.user.id}`, { code, phone, expires: Date.now() + 10 * 60 * 1000 });
         
-        console.log(`\n======================================================`);
-        console.log(`[MOCK SMS] Código de verificación para usuario ${req.user.id} (${phone}):`);
-        console.log(`CÓDIGO: ${code}`);
-        console.log(`======================================================\n`);
+        await smsService.sendSmsCode(phone, code);
+        
+        // Guardar log en base de datos
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        await db.query(`
+            INSERT INTO verification_log (id, user_id, type, method, status, ip_address, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [uuidv4(), req.user.id, 'phone', 'otp_sms', 'pending', ipAddress, new Date().toISOString()]);
         
         await db.query('UPDATE users SET phone = $1, updated_at = $2 WHERE id = $3', [phone, new Date().toISOString(), req.user.id]);
         
-        res.json({ success: true, message: 'Código de verificación enviado (simulado). Revise la consola del servidor.' });
+        res.json({ success: true, message: 'Código de verificación enviado al celular.' });
     } catch(err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Error al solicitar código de verificación.' });
@@ -360,6 +438,14 @@ router.post('/verify-phone/confirm', authenticateToken, async (req, res) => {
     
     try {
         await db.query('UPDATE users SET phone_verified = 1, updated_at = $1 WHERE id = $2', [new Date().toISOString(), req.user.id]);
+        
+        // Guardar log en base de datos
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        await db.query(`
+            INSERT INTO verification_log (id, user_id, type, method, status, ip_address, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [uuidv4(), req.user.id, 'phone', 'otp_sms', 'approved', ipAddress, new Date().toISOString()]);
+        
         verificationCodes.delete(key);
         res.json({ success: true, message: 'Número de teléfono verificado con éxito.' });
     } catch (err) {
@@ -380,12 +466,16 @@ router.post('/verify-email/request', authenticateToken, otpRateLimiter, async (r
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         verificationCodes.set(`email:${req.user.id}`, { code, email, expires: Date.now() + 10 * 60 * 1000 });
         
-        console.log(`\n======================================================`);
-        console.log(`[MOCK EMAIL] Código de verificación de correo para ${email}:`);
-        console.log(`CÓDIGO: ${code}`);
-        console.log(`======================================================\n`);
+        await emailService.sendVerificationCode(email, code);
         
-        res.json({ success: true, message: 'Código de verificación de correo enviado (simulado). Revise la consola.' });
+        // Guardar log en base de datos
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        await db.query(`
+            INSERT INTO verification_log (id, user_id, type, method, status, ip_address, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [uuidv4(), req.user.id, 'email', 'otp_email', 'pending', ipAddress, new Date().toISOString()]);
+        
+        res.json({ success: true, message: 'Código de verificación de correo enviado.' });
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Error al solicitar código de verificación.' });
@@ -417,6 +507,14 @@ router.post('/verify-email/confirm', authenticateToken, async (req, res) => {
     
     try {
         await db.query('UPDATE users SET email_verified = 1, updated_at = $1 WHERE id = $2', [new Date().toISOString(), req.user.id]);
+        
+        // Guardar log en base de datos
+        const ipAddress = req.ip || req.connection.remoteAddress;
+        await db.query(`
+            INSERT INTO verification_log (id, user_id, type, method, status, ip_address, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [uuidv4(), req.user.id, 'email', 'otp_email', 'approved', ipAddress, new Date().toISOString()]);
+        
         verificationCodes.delete(key);
         res.json({ success: true, message: 'Correo verificado con éxito.' });
     } catch (err) {

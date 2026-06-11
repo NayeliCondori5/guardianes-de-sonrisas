@@ -12,9 +12,12 @@ CREATE TABLE IF NOT EXISTS users (
   phone_verified INTEGER DEFAULT 0,
   two_factor_enabled INTEGER DEFAULT 0,
   totp_secret_encrypted TEXT,
+  identity_verified INTEGER DEFAULT 0,
+  identity_verified_at TEXT,
   created_at TEXT,
   updated_at TEXT
 );
+
 
 CREATE TABLE IF NOT EXISTS parents (
   user_id TEXT PRIMARY KEY,
@@ -214,4 +217,19 @@ CREATE TABLE IF NOT EXISTS services (
 
 CREATE INDEX IF NOT EXISTS idx_services_sitter ON services(sitter_id);
 CREATE INDEX IF NOT EXISTS idx_services_status ON services(status);
+
+CREATE TABLE IF NOT EXISTS verification_log (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  type TEXT CHECK(type IN ('identity','email','phone')),
+  method TEXT,           -- 'azure_face', 'otp_email', 'otp_sms', 'mock'
+  confidence_score REAL, -- para verificación facial
+  status TEXT CHECK(status IN ('pending','approved','rejected')),
+  ip_address TEXT,
+  created_at TEXT,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_verification_log_user ON verification_log(user_id);
+
 

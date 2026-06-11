@@ -47,7 +47,22 @@ const db = {
         await pool.query("ALTER TABLE sitters ADD COLUMN IF NOT EXISTS identity_status TEXT DEFAULT 'none';");
         await pool.query('ALTER TABLE sitters ADD COLUMN IF NOT EXISTS document_url TEXT;');
         await pool.query('ALTER TABLE sitters ADD COLUMN IF NOT EXISTS selfie_url TEXT;');
-        console.log('PostgreSQL: migración de columnas completada.');
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS identity_verified INTEGER DEFAULT 0;');
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS identity_verified_at TEXT;');
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS verification_log (
+                id TEXT PRIMARY KEY,
+                user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+                type TEXT CHECK(type IN ('identity','email','phone')),
+                method TEXT,
+                confidence_score REAL,
+                status TEXT CHECK(status IN ('pending','approved','rejected')),
+                ip_address TEXT,
+                created_at TEXT
+            );
+        `);
+        await pool.query('CREATE INDEX IF NOT EXISTS idx_verification_log_user ON verification_log(user_id);');
+        console.log('PostgreSQL: migración de columnas y tablas de verificación completada.');
     } catch (err) {
         console.error('Error inicializando esquema o migraciones PostgreSQL:', err);
     }
