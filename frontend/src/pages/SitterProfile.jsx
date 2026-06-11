@@ -108,7 +108,7 @@ const SitterProfile = () => {
         fetchSitterDetails();
     }, [id]);
 
-    const handleRequest = () => {
+    const handleRequest = async () => {
         if (!user) {
             setModal({
                 isOpen: true,
