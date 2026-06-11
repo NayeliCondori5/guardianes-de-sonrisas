@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Navbar from '../../components/common/Navbar';
 import GlassCard from '../../components/common/GlassCard';
-import { User, Calendar, Star, Camera, Trash2, Edit, AlertTriangle, MapPin, ShieldCheck, Mail, Smartphone, Lock, Check } from 'lucide-react';
+import { User, Calendar, Star, Camera, Trash2, Edit, AlertTriangle, MapPin, ShieldCheck, Mail, Smartphone, Lock as LockIcon, Check } from 'lucide-react';
 import CustomModal from '../../components/common/CustomModal';
 import api from '../../services/api';
 
@@ -949,7 +949,7 @@ const ParentDashboard = () => {
                                 <GlassCard className="rounded-[32px] p-8 shadow-md lg:col-span-2">
                                     <div className="flex justify-between items-start gap-4 mb-4">
                                         <h3 className="font-display-lg text-xl font-bold flex items-center gap-2">
-                                            <Lock className="text-primary" size={20} /> Autenticación de 2 Factores (2FA)
+                                            <LockIcon className="text-primary" size={20} /> Autenticación de 2 Factores (2FA)
                                         </h3>
                                         <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
                                             twoFactorEnabled ? 'bg-green-100 text-green-700' : 'bg-surface-container text-on-surface-variant'

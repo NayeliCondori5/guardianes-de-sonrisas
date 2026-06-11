@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Navbar from '../../components/common/Navbar';
 import GlassCard from '../../components/common/GlassCard';
-import { Calendar, Clock, DollarSign, Star, Camera, Check, Eye, Trash2, Edit, AlertTriangle, MapPin, Briefcase, Plus, CalendarDays, User, ShieldCheck, Smartphone, Lock } from 'lucide-react';
+import { Calendar, Clock, DollarSign, Star, Camera, Check, Eye, Trash2, Edit, AlertTriangle, MapPin, Briefcase, Plus, CalendarDays, User, ShieldCheck, Smartphone, Lock as LockIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CustomModal from '../../components/common/CustomModal';
 import api from '../../services/api';
@@ -1492,7 +1492,7 @@ const SitterDashboard = () => {
                                     <GlassCard className="rounded-[32px] p-8 shadow-md">
                                         <div className="flex justify-between items-start gap-4 mb-4">
                                             <h3 className="font-display-lg text-xl font-bold flex items-center gap-2">
-                                                <Lock className="text-primary" size={20} /> Autenticación de 2 Factores (2FA)
+                                                <LockIcon className="text-primary" size={20} /> Autenticación de 2 Factores (2FA)
                                             </h3>
                                             <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
                                                 twoFactorEnabled ? 'bg-green-100 text-green-700' : 'bg-surface-container text-on-surface-variant'
