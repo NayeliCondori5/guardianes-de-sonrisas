@@ -6,18 +6,42 @@ const Login = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const { login } = useAuth();
+    const [show2FAChallenge, setShow2FAChallenge] = useState(false);
+    const [otpCode, setOtpCode] = useState('');
+    const [tempUserId, setTempUserId] = useState('');
+    const { login, verify2FA } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setError('');
         try {
-            const user = await login(email, password);
-            if (user.role === 'admin') navigate('/dashboard/admin');
-            else if (user.role === 'parent') navigate('/dashboard/parent');
-            else navigate('/dashboard/sitter');
+            const res = await login(email, password);
+            if (res && res.requires2FA) {
+                setTempUserId(res.userId);
+                setShow2FAChallenge(true);
+            } else if (res) {
+                if (res.role === 'admin') navigate('/dashboard/admin');
+                else if (res.role === 'parent') navigate('/dashboard/parent');
+                else navigate('/dashboard/sitter');
+            }
         } catch (err) {
             setError(err.response?.data?.message || 'Error al iniciar sesión');
+        }
+    };
+
+    const handle2FAVerify = async (e) => {
+        e.preventDefault();
+        setError('');
+        try {
+            const user = await verify2FA(tempUserId, otpCode);
+            if (user) {
+                if (user.role === 'admin') navigate('/dashboard/admin');
+                else if (user.role === 'parent') navigate('/dashboard/parent');
+                else navigate('/dashboard/sitter');
+            }
+        } catch (err) {
+            setError(err.response?.data?.message || 'Código de seguridad incorrecto');
         }
     };
 
@@ -67,25 +91,62 @@ const Login = () => {
 
                     {error && <div className="bg-error-container text-on-error-container p-4 rounded-xl mb-6 text-sm font-bold border border-error/20 text-center">{error}</div>}
                     
-                    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-                        <div>
-                            <label className="block text-xs font-bold text-outline uppercase tracking-wider mb-2">Correo Electrónico</label>
-                            <input type="email" className="w-full p-4 rounded-2xl border-none bg-surface-container-low text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all shadow-inner text-sm" placeholder="correo@ejemplo.com" value={email} onChange={e => setEmail(e.target.value)} required />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-outline uppercase tracking-wider mb-2">Contraseña</label>
-                            <input type="password" className="w-full p-4 rounded-2xl border-none bg-surface-container-low text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all shadow-inner text-sm" placeholder="Tu contraseña" value={password} onChange={e => setPassword(e.target.value)} required />
-                        </div>
-                        
-                        <div className="flex flex-col gap-3 mt-4">
-                            <button type="submit" className="w-full bg-primary text-white py-4 rounded-full font-bold hover:bg-primary-container transition shadow-lg active:scale-[0.98]">
-                                Iniciar Sesión
-                            </button>
-                            <Link to="/register" className="w-full bg-secondary-fixed text-on-secondary-fixed text-center py-4 rounded-full font-bold hover:bg-secondary-fixed-dim transition shadow-md block">
-                                Registrarse
-                            </Link>
-                        </div>
-                    </form>
+                    {show2FAChallenge ? (
+                        <form onSubmit={handle2FAVerify} className="flex flex-col gap-5">
+                            <div>
+                                <label className="block text-xs font-bold text-outline uppercase tracking-wider mb-2">Código de Seguridad (2FA)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full p-4 rounded-2xl border-none bg-surface-container-low text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all shadow-inner text-sm font-bold text-center tracking-widest" 
+                                    placeholder="123456" 
+                                    value={otpCode} 
+                                    onChange={e => setOtpCode(e.target.value)} 
+                                    required 
+                                    maxLength="6"
+                                    autoFocus
+                                />
+                                <p className="text-xs text-on-surface-variant mt-2 text-center">
+                                    Introduce el código de 6 dígitos de tu aplicación de autenticación para continuar.
+                                </p>
+                            </div>
+                            <div className="flex flex-col gap-3 mt-4">
+                                <button type="submit" className="w-full bg-primary text-white py-4 rounded-full font-bold hover:bg-primary-container transition shadow-lg active:scale-[0.98]">
+                                    Verificar y Entrar
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => {
+                                        setShow2FAChallenge(false);
+                                        setOtpCode('');
+                                        setError('');
+                                    }} 
+                                    className="w-full bg-surface-container text-on-surface-variant py-4 rounded-full font-bold hover:bg-surface-container-highest transition block text-center"
+                                >
+                                    Volver
+                                </button>
+                            </div>
+                        </form>
+                    ) : (
+                        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+                            <div>
+                                <label className="block text-xs font-bold text-outline uppercase tracking-wider mb-2">Correo Electrónico</label>
+                                <input type="email" className="w-full p-4 rounded-2xl border-none bg-surface-container-low text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all shadow-inner text-sm" placeholder="correo@ejemplo.com" value={email} onChange={e => setEmail(e.target.value)} required />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-outline uppercase tracking-wider mb-2">Contraseña</label>
+                                <input type="password" className="w-full p-4 rounded-2xl border-none bg-surface-container-low text-on-surface focus:ring-2 focus:ring-primary outline-none transition-all shadow-inner text-sm" placeholder="Tu contraseña" value={password} onChange={e => setPassword(e.target.value)} required />
+                            </div>
+                            
+                            <div className="flex flex-col gap-3 mt-4">
+                                <button type="submit" className="w-full bg-primary text-white py-4 rounded-full font-bold hover:bg-primary-container transition shadow-lg active:scale-[0.98]">
+                                    Iniciar Sesión
+                                </button>
+                                <Link to="/register" className="w-full bg-secondary-fixed text-on-secondary-fixed text-center py-4 rounded-full font-bold hover:bg-secondary-fixed-dim transition shadow-md block">
+                                    Registrarse
+                                </Link>
+                            </div>
+                        </form>
+                    )}
                 </div>
             </div>
         </div>

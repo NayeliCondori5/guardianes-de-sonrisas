@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS users (
   city TEXT,
   is_active INTEGER DEFAULT 1,
   email_verified INTEGER DEFAULT 0,
+  phone_verified INTEGER DEFAULT 0,
+  two_factor_enabled INTEGER DEFAULT 0,
+  totp_secret_encrypted TEXT,
   created_at TEXT,
   updated_at TEXT
 );
@@ -47,6 +50,9 @@ CREATE TABLE IF NOT EXISTS sitters (
   superpowers TEXT,
   comfortable_with TEXT,
   availability TEXT,
+  identity_status TEXT DEFAULT 'none',
+  document_url TEXT,
+  selfie_url TEXT,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (verified_by) REFERENCES users(id) ON DELETE SET NULL
 );

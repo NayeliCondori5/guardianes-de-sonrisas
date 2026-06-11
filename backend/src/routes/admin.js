@@ -4,6 +4,7 @@ const db = require('../database/db');
 const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
+const deleteFile = require('../utils/deleteFile');
 
 router.get('/stats', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ success: false });
@@ -201,8 +202,9 @@ router.get('/sitters', authenticateToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ success: false });
     try {
         const { rows: sitters } = await db.query(`
-            SELECT u.id, u.full_name, u.email, u.city, u.avatar_url, u.created_at,
-                   s.is_verified, s.hourly_rate, s.experience_years, s.rating, s.description
+            SELECT u.id, u.full_name, u.email, u.city, u.avatar_url, u.created_at, u.phone_verified, u.email_verified,
+                   s.is_verified, s.hourly_rate, s.experience_years, s.rating, s.description,
+                   s.identity_status, s.document_url, s.selfie_url
             FROM users u
             JOIN sitters s ON u.id = s.user_id
             WHERE u.role = 'sitter' AND u.is_active = 1
@@ -234,6 +236,52 @@ router.put('/sitters/:id/verify', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Error interno' });
+    }
+});
+
+// PUT /admin/sitters/:id/verify-identity -> Approve or reject identity verification
+router.put('/sitters/:id/verify-identity', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ success: false, message: 'No autorizado' });
+    const { approve } = req.body;
+    
+    try {
+        const { rows: sitterRows } = await db.query('SELECT document_url, selfie_url FROM sitters WHERE user_id = $1', [req.params.id]);
+        if (sitterRows.length === 0) return res.status(404).json({ success: false, message: 'Cuidador no encontrado' });
+        
+        const { document_url, selfie_url } = sitterRows[0];
+        const identityStatus = approve ? 'approved' : 'rejected';
+        const isVerifiedVal = approve ? 1 : 0;
+        
+        await db.transaction(async (client) => {
+            await client.query(`
+                UPDATE sitters 
+                SET identity_status = $1, 
+                    is_verified = $2, 
+                    verified_by = $3, 
+                    verified_at = $4,
+                    document_url = NULL, 
+                    selfie_url = NULL 
+                WHERE user_id = $5
+            `, [identityStatus, isVerifiedVal, req.user.id, new Date().toISOString(), req.params.id]);
+        });
+        
+        // Eliminar archivos físicamente de Cloudinary/local de forma segura
+        if (document_url) {
+            await deleteFile(document_url);
+        }
+        if (selfie_url) {
+            await deleteFile(selfie_url);
+        }
+        
+        res.json({
+            success: true,
+            message: approve 
+                ? 'Identidad oficial aprobada exitosamente y archivos eliminados de forma segura.' 
+                : 'Identidad oficial rechazada y archivos eliminados.'
+        });
+    } catch (err) {
+        console.error('Error al procesar verificación de identidad:', err);
+        res.status(500).json({ success: false, message: 'Error interno al procesar la verificación.' });
     }
 });
 

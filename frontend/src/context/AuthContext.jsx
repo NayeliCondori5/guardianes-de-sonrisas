@@ -19,6 +19,19 @@ export const AuthProvider = ({ children }) => {
     const login = async (email, password) => {
         const { data } = await api.post('/auth/login', { email, password });
         if (data.success) {
+            if (data.requires2FA) {
+                return data; // Return to component to handle the UI challenge
+            }
+            localStorage.setItem('token', data.data.access_token);
+            localStorage.setItem('user', JSON.stringify(data.data.user));
+            setUser(data.data.user);
+            return data.data.user;
+        }
+    };
+
+    const verify2FA = async (userId, code) => {
+        const { data } = await api.post('/auth/2fa/verify', { userId, code });
+        if (data.success) {
             localStorage.setItem('token', data.data.access_token);
             localStorage.setItem('user', JSON.stringify(data.data.user));
             setUser(data.data.user);
@@ -46,7 +59,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, verify2FA, register, logout, loading }}>
             {children}
         </AuthContext.Provider>
     );

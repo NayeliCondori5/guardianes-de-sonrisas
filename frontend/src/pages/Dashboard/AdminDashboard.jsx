@@ -38,6 +38,11 @@ const AdminDashboard = () => {
     const [services, setServices] = useState([]);
     const [allSitters, setAllSitters] = useState([]);
 
+    // Verify Identity Modal states
+    const [isVerifyIdentityModalOpen, setIsVerifyIdentityModalOpen] = useState(false);
+    const [selectedSitterForVerification, setSelectedSitterForVerification] = useState(null);
+    const [isProcessingVerification, setIsProcessingVerification] = useState(false);
+
     const refreshServices = async () => {
         try {
             const response = await api.get('/services?status=pending');
@@ -70,6 +75,21 @@ const AdminDashboard = () => {
             refreshSitters();
         } catch (err) {
             console.error('Error updating sitter verification:', err);
+        }
+    };
+
+    const handleVerifyIdentity = async (sitterId, approve) => {
+        setIsProcessingVerification(true);
+        try {
+            await api.put(`/admin/sitters/${sitterId}/verify-identity`, { approve });
+            setIsVerifyIdentityModalOpen(false);
+            setSelectedSitterForVerification(null);
+            refreshSitters();
+            refreshData();
+        } catch (err) {
+            console.error('Error al verificar identidad del cuidador:', err);
+        } finally {
+            setIsProcessingVerification(false);
         }
     };
 
@@ -530,7 +550,8 @@ const AdminDashboard = () => {
                                             <th className="p-4">Ciudad</th>
                                             <th className="p-4">Tarifa</th>
                                             <th className="p-4">Exp.</th>
-                                            <th className="p-4 text-center">Estado</th>
+                                            <th className="p-4 text-center">Verificación</th>
+                                            <th className="p-4 text-center">Identidad</th>
                                             <th className="p-4 text-center">Acción</th>
                                         </tr>
                                     </thead>
@@ -562,6 +583,28 @@ const AdminDashboard = () => {
                                                     ) : (
                                                         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
                                                             <ShieldOff size={12} /> Sin verificar
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    {s.identity_status === 'approved' ? (
+                                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                                                            <ShieldCheck size={12} /> ID Aprobado
+                                                        </span>
+                                                    ) : s.identity_status === 'pending_review' ? (
+                                                        <button
+                                                            onClick={() => { setSelectedSitterForVerification(s); setIsVerifyIdentityModalOpen(true); }}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-full text-xs font-bold hover:bg-amber-600 transition active:scale-95 shadow-sm animate-pulse"
+                                                        >
+                                                            <AlertTriangle size={13} /> Revisar
+                                                        </button>
+                                                    ) : s.identity_status === 'rejected' ? (
+                                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                                                            <X size={12} /> Rechazado
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-surface-container text-on-surface-variant">
+                                                            Sin envío
                                                         </span>
                                                     )}
                                                 </td>
@@ -762,6 +805,159 @@ const AdminDashboard = () => {
                             )}
                         </div>
                     </GlassCard>
+                </div>
+            )}
+
+            {/* ===== Modal de Verificación de Identidad ===== */}
+            {isVerifyIdentityModalOpen && selectedSitterForVerification && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="w-full max-w-4xl bg-[var(--md-sys-color-surface)] rounded-[40px] shadow-2xl relative overflow-hidden border-t-8 border-t-amber-500 flex flex-col" style={{maxHeight: '90vh'}}>
+                        {/* Header */}
+                        <div className="p-8 pb-5 flex justify-between items-center border-b border-outline-variant/20 bg-amber-50/50">
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 rounded-2xl bg-amber-500/10 text-amber-600">
+                                    <ShieldCheck size={26} />
+                                </div>
+                                <div>
+                                    <h2 className="font-display-lg text-2xl font-bold text-dark">Revisión de Identidad</h2>
+                                    <p className="text-xs text-on-surface-variant font-medium uppercase tracking-widest">Verifica DNI y Selfie del cuidador</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => { setIsVerifyIdentityModalOpen(false); setSelectedSitterForVerification(null); }}
+                                className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition"
+                            >
+                                <X size={22} />
+                            </button>
+                        </div>
+
+                        {/* Sitter Info */}
+                        <div className="px-8 py-4 flex items-center gap-4 bg-surface-container-low/60 border-b border-outline-variant/10">
+                            <div className="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center text-secondary font-bold text-lg overflow-hidden flex-shrink-0">
+                                {selectedSitterForVerification.avatar_url
+                                    ? <img src={selectedSitterForVerification.avatar_url} alt={selectedSitterForVerification.full_name} className="w-full h-full object-cover" />
+                                    : selectedSitterForVerification.full_name?.charAt(0)
+                                }
+                            </div>
+                            <div>
+                                <p className="font-bold text-lg text-on-surface">{selectedSitterForVerification.full_name}</p>
+                                <p className="text-sm text-on-surface-variant">{selectedSitterForVerification.email}</p>
+                            </div>
+                            <span className="ml-auto px-4 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 uppercase tracking-wider">
+                                Pendiente de Revisión
+                            </span>
+                        </div>
+
+                        {/* Document Comparison */}
+                        <div className="p-8 flex-1 overflow-y-auto custom-scrollbar">
+                            <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
+                                Compara la <strong>foto del documento de identidad</strong> con la <strong>selfie</strong> del cuidador para confirmar que son la misma persona. Si todo es correcto, aprueba la verificación.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* DNI Document */}
+                                <div className="rounded-3xl border-2 border-outline-variant/30 overflow-hidden bg-surface-container-low/50">
+                                    <div className="p-4 border-b border-outline-variant/20 flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                                            <BookOpen size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-sm text-on-surface">Documento de Identidad (DNI)</p>
+                                            <p className="text-xs text-on-surface-variant">Foto del documento oficial</p>
+                                        </div>
+                                    </div>
+                                    <div className="p-4 flex items-center justify-center min-h-[220px] bg-black/5">
+                                        {selectedSitterForVerification.document_url ? (
+                                            <img
+                                                src={selectedSitterForVerification.document_url}
+                                                alt="Documento de Identidad"
+                                                className="max-w-full max-h-72 object-contain rounded-xl shadow-md"
+                                            />
+                                        ) : (
+                                            <div className="text-center py-8">
+                                                <div className="w-16 h-16 rounded-full bg-outline/10 flex items-center justify-center mx-auto mb-3">
+                                                    <BookOpen size={28} className="text-outline" />
+                                                </div>
+                                                <p className="text-sm text-on-surface-variant font-medium">Sin documento cargado</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Selfie */}
+                                <div className="rounded-3xl border-2 border-outline-variant/30 overflow-hidden bg-surface-container-low/50">
+                                    <div className="p-4 border-b border-outline-variant/20 flex items-center gap-2">
+                                        <div className="w-8 h-8 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary">
+                                            <Users size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-sm text-on-surface">Selfie de Verificación</p>
+                                            <p className="text-xs text-on-surface-variant">Foto tomada por el cuidador</p>
+                                        </div>
+                                    </div>
+                                    <div className="p-4 flex items-center justify-center min-h-[220px] bg-black/5">
+                                        {selectedSitterForVerification.selfie_url ? (
+                                            <img
+                                                src={selectedSitterForVerification.selfie_url}
+                                                alt="Selfie de Verificación"
+                                                className="max-w-full max-h-72 object-contain rounded-xl shadow-md"
+                                            />
+                                        ) : (
+                                            <div className="text-center py-8">
+                                                <div className="w-16 h-16 rounded-full bg-outline/10 flex items-center justify-center mx-auto mb-3">
+                                                    <Users size={28} className="text-outline" />
+                                                </div>
+                                                <p className="text-sm text-on-surface-variant font-medium">Sin selfie cargada</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Security Notice */}
+                            <div className="mt-6 p-4 rounded-2xl bg-blue-50 border border-blue-200 flex gap-3">
+                                <div className="text-blue-500 mt-0.5 flex-shrink-0"><AlertTriangle size={16} /></div>
+                                <div>
+                                    <p className="text-xs font-bold text-blue-800 mb-1">Aviso de seguridad</p>
+                                    <p className="text-xs text-blue-700 leading-relaxed">
+                                        Al aprobar, los documentos serán eliminados permanentemente del servidor por seguridad. Solo quedará registrado el estado de verificación del cuidador.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-8 border-t border-outline-variant/20 bg-surface-container-low/50 flex gap-4">
+                            <button
+                                onClick={() => { setIsVerifyIdentityModalOpen(false); setSelectedSitterForVerification(null); }}
+                                disabled={isProcessingVerification}
+                                className="flex-1 px-6 py-4 rounded-full font-bold bg-surface-container text-on-surface-variant hover:bg-surface-container-highest transition shadow-sm active:scale-95 disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => handleVerifyIdentity(selectedSitterForVerification.id, false)}
+                                disabled={isProcessingVerification}
+                                className="flex-1 bg-error text-white py-4 rounded-full font-bold shadow-xl hover:bg-error/90 transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {isProcessingVerification ? (
+                                    <span className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
+                                ) : (
+                                    <><X size={18} /> Rechazar</>  
+                                )}
+                            </button>
+                            <button
+                                onClick={() => handleVerifyIdentity(selectedSitterForVerification.id, true)}
+                                disabled={isProcessingVerification}
+                                className="flex-[2] bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-full font-bold shadow-xl hover:from-green-600 hover:to-emerald-700 transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {isProcessingVerification ? (
+                                    <span className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
+                                ) : (
+                                    <><ShieldCheck size={18} /> Aprobar Identidad</>
+                                )}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

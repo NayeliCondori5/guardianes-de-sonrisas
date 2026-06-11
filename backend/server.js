@@ -6,6 +6,9 @@ const path = require('path');
 
 dotenv.config();
 
+// Inicializar tareas programadas
+require('./src/jobs/cleanupJob');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 

@@ -104,7 +104,11 @@ router.get('/featured', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const { rows: sitterRows } = await db.query(`
-            SELECT u.id, u.full_name, u.city, u.avatar_url, s.experience_years, s.hourly_rate, s.description, s.rating, s.total_reviews, s.is_verified, s.age, s.education, s.driver_license, s.has_car, s.smoker, s.preferred_location, s.superpowers, s.comfortable_with, s.availability
+            SELECT u.id, u.full_name, u.city, u.avatar_url, u.email_verified, u.phone_verified,
+                   s.experience_years, s.hourly_rate, s.description, s.rating, s.total_reviews,
+                   s.is_verified, s.age, s.education, s.driver_license, s.has_car, s.smoker,
+                   s.preferred_location, s.superpowers, s.comfortable_with, s.availability,
+                   s.identity_status
             FROM users u JOIN sitters s ON u.id = s.user_id
             WHERE u.id = $1 AND u.role = 'sitter'
         `, [req.params.id]);
@@ -121,6 +125,9 @@ router.get('/:id', async (req, res) => {
         sitterInfo.name = sitterInfo.full_name;
         sitterInfo.avatar = sitterInfo.avatar_url;
         sitterInfo.verified = sitterInfo.is_verified === 1;
+        sitterInfo.identityVerified = sitterInfo.identity_status === 'approved';
+        sitterInfo.emailVerified = sitterInfo.email_verified === 1;
+        sitterInfo.phoneVerified = sitterInfo.phone_verified === 1;
         
         try {
             sitterInfo.superpowers = sitterInfo.superpowers ? JSON.parse(sitterInfo.superpowers) : [];

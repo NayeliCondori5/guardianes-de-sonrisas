@@ -79,6 +79,10 @@ const SitterProfile = () => {
                         preferredLocation: data.preferred_location || 'En casa de la familia',
                         lastActive: 'Hace 2 horas',
                         experience: data.experience_years || 3,
+                        verified: data.is_verified || false,
+                        identityVerified: data.identity_status === 'approved',
+                        emailVerified: data.email_verified || false,
+                        phoneVerified: data.phone_verified || false,
                         availability: data.availability || {
                             LUN: { manana: true, mediodia: false, tarde: true, noche: false },
                             MAR: { manana: true, mediodia: true, tarde: true, noche: false },
@@ -301,12 +305,36 @@ const SitterProfile = () => {
                             </div>
                         </div>
 
+                        {/* Insignias de Seguridad */}
+                        <div className="mt-5 flex flex-wrap justify-center gap-2">
+                            {sitter.identityVerified && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-green-100 text-green-700 border border-green-200">
+                                    <ShieldCheck size={13} /> Identidad Verificada
+                                </span>
+                            )}
+                            {sitter.verified && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
+                                    <ShieldCheck size={13} /> Verificado por Admin
+                                </span>
+                            )}
+                            {sitter.emailVerified && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-blue-50 text-blue-600 border border-blue-200">
+                                    ✉️ Email Verificado
+                                </span>
+                            )}
+                            {sitter.phoneVerified && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200">
+                                    📱 Teléfono Verificado
+                                </span>
+                            )}
+                        </div>
+
                         {sitter.verified ? (
-                            <button onClick={handleRequest} className="w-full mt-8 bg-primary text-white py-4 rounded-full font-bold shadow-lg hover:bg-primary-container transition active:scale-95 text-lg">
+                            <button onClick={handleRequest} className="w-full mt-6 bg-primary text-white py-4 rounded-full font-bold shadow-lg hover:bg-primary-container transition active:scale-95 text-lg">
                                 SOLICITAR NIÑERA
                             </button>
                         ) : (
-                            <div className="mt-8">
+                            <div className="mt-6">
                                 <button disabled className="w-full bg-surface-container-highest text-on-surface-variant py-4 rounded-full font-bold shadow-sm text-lg cursor-not-allowed">
                                     SOLICITAR NIÑERA
                                 </button>

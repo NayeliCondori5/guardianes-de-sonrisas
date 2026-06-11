@@ -6,7 +6,7 @@ const path = require('path');
 // En entorno local (desarrollo), puede que no necesites SSL, pero en Render (producción) sí.
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/guardianes',
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: (process.env.NODE_ENV === 'production' || (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('render.com'))) ? { rejectUnauthorized: false } : false
 });
 
 const db = {
@@ -40,6 +40,13 @@ const db = {
         }
         // Ejecutar migración para añadir num_children si no existe
         await pool.query('ALTER TABLE bookings ADD COLUMN IF NOT EXISTS num_children INTEGER DEFAULT 1;');
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified INTEGER DEFAULT 0;');
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified INTEGER DEFAULT 0;');
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS two_factor_enabled INTEGER DEFAULT 0;');
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret_encrypted TEXT;');
+        await pool.query("ALTER TABLE sitters ADD COLUMN IF NOT EXISTS identity_status TEXT DEFAULT 'none';");
+        await pool.query('ALTER TABLE sitters ADD COLUMN IF NOT EXISTS document_url TEXT;');
+        await pool.query('ALTER TABLE sitters ADD COLUMN IF NOT EXISTS selfie_url TEXT;');
         console.log('PostgreSQL: migración de columnas completada.');
     } catch (err) {
         console.error('Error inicializando esquema o migraciones PostgreSQL:', err);

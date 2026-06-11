@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import Navbar from '../../components/common/Navbar';
 import GlassCard from '../../components/common/GlassCard';
-import { Calendar, Clock, DollarSign, Star, Camera, Check, Eye, Trash2, Edit, AlertTriangle, MapPin, Briefcase, Plus, CalendarDays, User } from 'lucide-react';
+import { Calendar, Clock, DollarSign, Star, Camera, Check, Eye, Trash2, Edit, AlertTriangle, MapPin, Briefcase, Plus, CalendarDays, User, ShieldCheck, Smartphone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import CustomModal from '../../components/common/CustomModal';
 import api from '../../services/api';
@@ -17,6 +17,33 @@ const SitterDashboard = () => {
     const [modal, setModal] = useState({ isOpen: false, title: '', message: '', type: 'success' });
     const [isEditingProfile, setIsEditingProfile] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+    // Verification states
+    const [identityStatus, setIdentityStatus] = useState('none');
+    const [documentUrl, setDocumentUrl] = useState(null);
+    const [selfieUrl, setSelfieUrl] = useState(null);
+    const [documentFile, setDocumentFile] = useState(null);
+    const [selfieFile, setSelfieFile] = useState(null);
+    const [isUploadingDocs, setIsUploadingDocs] = useState(false);
+
+    // Phone verification
+    const [phoneInput, setPhoneInput] = useState(user?.phone || '');
+    const [phoneStep, setPhoneStep] = useState('input');
+    const [phoneCodeInput, setPhoneCodeInput] = useState('');
+    const [phoneVerified, setPhoneVerified] = useState(0);
+
+    // Email verification
+    const [emailStep, setEmailStep] = useState('none');
+    const [emailCodeInput, setEmailCodeInput] = useState('');
+    const [emailVerified, setEmailVerified] = useState(0);
+
+    // 2FA verification
+    const [twoFactorEnabled, setTwoFactorEnabled] = useState(0);
+    const [twoFactorStep, setTwoFactorStep] = useState('none'); // 'none', 'setup', 'disable'
+    const [twoFactorQrCode, setTwoFactorQrCode] = useState('');
+    const [twoFactorSecret, setTwoFactorSecret] = useState('');
+    const [twoFactorCodeInput, setTwoFactorCodeInput] = useState('');
+    const [twoFactorPasswordInput, setTwoFactorPasswordInput] = useState('');
 
     // Services states
     const [myServices, setMyServices] = useState([]);
@@ -250,6 +277,14 @@ const SitterDashboard = () => {
                     setSelectedComfortable(dbUser.comfortableWith || dbUser.comfortable_with || []);
                     setProfileImage(dbUser.avatar_url || dbUser.avatar || null);
                     
+                    setIdentityStatus(dbUser.identity_status || 'none');
+                    setDocumentUrl(dbUser.document_url || null);
+                    setSelfieUrl(dbUser.selfie_url || null);
+                    setPhoneInput(dbUser.phone || '');
+                    setPhoneVerified(dbUser.phone_verified || 0);
+                    setEmailVerified(dbUser.email_verified || 0);
+                    setTwoFactorEnabled(dbUser.two_factor_enabled || 0);
+                    
                     setProfileForm({
                         full_name: dbUser.full_name || '',
                         city: dbUser.city || '',
@@ -327,6 +362,240 @@ const SitterDashboard = () => {
         }
     };
 
+    const handleIdentityUpload = async (e) => {
+        e.preventDefault();
+        if (!documentFile || !selfieFile) {
+            setModal({
+                isOpen: true,
+                title: "Archivos Faltantes",
+                message: "Por favor selecciona tanto el documento de identidad como la selfie de validación.",
+                type: 'error'
+            });
+            return;
+        }
+
+        setIsUploadingDocs(true);
+        const formData = new FormData();
+        formData.append('document', documentFile);
+        formData.append('selfie', selfieFile);
+
+        try {
+            const response = await api.post('/users/verify-identity/upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            if (response.data && response.data.success) {
+                setIdentityStatus('pending');
+                setDocumentUrl(response.data.data.document_url);
+                setSelfieUrl(response.data.data.selfie_url);
+                setModal({
+                    isOpen: true,
+                    title: "Documentos Enviados",
+                    message: "Tus documentos han sido subidos con éxito y están en revisión por el administrador.",
+                    type: 'success'
+                });
+            }
+        } catch (err) {
+            console.error('Error al subir documentos de identidad:', err);
+            const errMsg = err.response?.data?.message || "No se pudieron subir los documentos. Intenta de nuevo.";
+            setModal({
+                isOpen: true,
+                title: "Error de Subida",
+                message: errMsg,
+                type: 'error'
+            });
+        } finally {
+            setIsUploadingDocs(false);
+        }
+    };
+
+    const handlePhoneVerifyRequest = async (e) => {
+        e.preventDefault();
+        if (!phoneInput) {
+            setModal({
+                isOpen: true,
+                title: "Teléfono Requerido",
+                message: "Por favor ingresa un número de teléfono.",
+                type: 'error'
+            });
+            return;
+        }
+
+        try {
+            const response = await api.post('/users/verify-phone/request', { phone: phoneInput });
+            if (response.data && response.data.success) {
+                setPhoneStep('confirm');
+                setModal({
+                    isOpen: true,
+                    title: "Código Solicitado",
+                    message: "Se ha solicitado el código de verificación. Revise la consola del servidor backend.",
+                    type: 'success'
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            setModal({
+                isOpen: true,
+                title: "Error",
+                message: err.response?.data?.message || "No se pudo solicitar el código.",
+                type: 'error'
+            });
+        }
+    };
+
+    const handlePhoneVerifyConfirm = async (e) => {
+        e.preventDefault();
+        if (!phoneCodeInput) return;
+
+        try {
+            const response = await api.post('/users/verify-phone/confirm', { code: phoneCodeInput });
+            if (response.data && response.data.success) {
+                setPhoneVerified(1);
+                setPhoneStep('input');
+                setModal({
+                    isOpen: true,
+                    title: "¡Teléfono Verificado!",
+                    message: "Tu número de teléfono ha sido verificado con éxito.",
+                    type: 'success'
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            setModal({
+                isOpen: true,
+                title: "Error",
+                message: err.response?.data?.message || "Código incorrecto.",
+                type: 'error'
+            });
+        }
+    };
+
+    const handleEmailVerifyRequest = async () => {
+        try {
+            const response = await api.post('/users/verify-email/request');
+            if (response.data && response.data.success) {
+                setEmailStep('confirm');
+                setModal({
+                    isOpen: true,
+                    title: "Código Enviado",
+                    message: "Se ha enviado un código de verificación simulado. Revise la consola de desarrollo del servidor.",
+                    type: 'success'
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            setModal({
+                isOpen: true,
+                title: "Error",
+                message: err.response?.data?.message || "No se pudo solicitar la verificación de correo.",
+                type: 'error'
+            });
+        }
+    };
+
+    const handleEmailVerifyConfirm = async (e) => {
+        e.preventDefault();
+        if (!emailCodeInput) return;
+
+        try {
+            const response = await api.post('/users/verify-email/confirm', { code: emailCodeInput });
+            if (response.data && response.data.success) {
+                setEmailVerified(1);
+                setEmailStep('none');
+                setModal({
+                    isOpen: true,
+                    title: "¡Correo Verificado!",
+                    message: "Tu dirección de correo ha sido verificada correctamente.",
+                    type: 'success'
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            setModal({
+                isOpen: true,
+                title: "Error",
+                message: err.response?.data?.message || "Código incorrecto.",
+                type: 'error'
+            });
+        }
+    };
+
+    const handle2FASetup = async () => {
+        try {
+            const response = await api.post('/users/2fa/setup');
+            if (response.data && response.data.success) {
+                setTwoFactorQrCode(response.data.qrCode);
+                setTwoFactorSecret(response.data.secret);
+                setTwoFactorStep('setup');
+            }
+        } catch (err) {
+            console.error('Error in 2FA setup:', err);
+            setModal({
+                isOpen: true,
+                title: "Error",
+                message: err.response?.data?.message || "No se pudo iniciar la configuración de 2FA.",
+                type: 'error'
+            });
+        }
+    };
+
+    const handle2FAConfirm = async (e) => {
+        e.preventDefault();
+        if (!twoFactorCodeInput) return;
+        try {
+            const response = await api.post('/users/2fa/confirm', { code: twoFactorCodeInput });
+            if (response.data && response.data.success) {
+                setTwoFactorEnabled(1);
+                setTwoFactorStep('none');
+                setTwoFactorCodeInput('');
+                setModal({
+                    isOpen: true,
+                    title: "¡2FA Activado!",
+                    message: "La autenticación de dos factores ha sido activada exitosamente.",
+                    type: 'success'
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            setModal({
+                isOpen: true,
+                title: "Error",
+                message: err.response?.data?.message || "Código incorrecto.",
+                type: 'error'
+            });
+        }
+    };
+
+    const handle2FADisable = async (e) => {
+        e.preventDefault();
+        if (!twoFactorCodeInput || !twoFactorPasswordInput) return;
+        try {
+            const response = await api.post('/users/2fa/disable', { 
+                code: twoFactorCodeInput, 
+                password: twoFactorPasswordInput 
+            });
+            if (response.data && response.data.success) {
+                setTwoFactorEnabled(0);
+                setTwoFactorStep('none');
+                setTwoFactorCodeInput('');
+                setTwoFactorPasswordInput('');
+                setModal({
+                    isOpen: true,
+                    title: "2FA Desactivado",
+                    message: "La autenticación de dos factores ha sido desactivada.",
+                    type: 'success'
+                });
+            }
+        } catch (err) {
+            console.error(err);
+            setModal({
+                isOpen: true,
+                title: "Error",
+                message: err.response?.data?.message || "Código o contraseña incorrectos.",
+                type: 'error'
+            });
+        }
+    };
+
     const toggleOption = (list, setList, option) => {
         if (list.includes(option)) {
             setList(list.filter(item => item !== option));
@@ -364,6 +633,7 @@ const SitterDashboard = () => {
                             <button onClick={() => setActiveTab('earnings')} className={`flex items-center gap-3 p-3 rounded-xl transition-all font-bold ${activeTab === 'earnings' ? 'bg-primary text-white shadow-md' : 'hover:bg-surface-container'}`}><DollarSign size={20} /> Ganancias</button>
                             <button onClick={() => setActiveTab('profile')} className={`flex items-center gap-3 p-3 rounded-xl transition-all font-bold ${activeTab === 'profile' ? 'bg-primary text-white shadow-md' : 'hover:bg-surface-container'}`}><Star size={20} /> Mi Perfil Profesional</button>
                             <button onClick={() => setActiveTab('services')} className={`flex items-center gap-3 p-3 rounded-xl transition-all font-bold ${activeTab === 'services' ? 'bg-primary text-white shadow-md' : 'hover:bg-surface-container'}`}><Briefcase size={20} /> Mis Servicios</button>
+                            <button onClick={() => setActiveTab('verification')} className={`flex items-center gap-3 p-3 rounded-xl transition-all font-bold ${activeTab === 'verification' ? 'bg-primary text-white shadow-md' : 'hover:bg-surface-container'}`}><ShieldCheck size={20} /> Verificación de Cuenta</button>
                         </nav>
                     </GlassCard>
                 </aside>
@@ -993,6 +1263,321 @@ const SitterDashboard = () => {
                                     )}
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {activeTab === 'verification' && (
+                        <div className="space-y-8">
+                            <div>
+                                <h2 className="font-display-lg text-3xl font-bold text-primary">Verificación de Cuenta</h2>
+                                <p className="text-on-surface-variant text-sm mt-1">
+                                    Completa las verificaciones para aumentar la confianza de las familias y destacar tu perfil profesional.
+                                </p>
+                            </div>
+
+                            <GlassCard className="rounded-[28px] p-6 shadow-md flex flex-col md:flex-row items-center gap-6 border-l-4 border-l-primary bg-primary/5">
+                                <div className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                                    <ShieldCheck size={32} />
+                                </div>
+                                <div className="flex-1 text-center md:text-left">
+                                    <h3 className="font-bold text-lg mb-1">Tu Nivel de Confianza: 
+                                        <span className="text-primary ml-1.5 font-extrabold uppercase">
+                                            {identityStatus === 'verified' && emailVerified && phoneVerified ? 'Máximo (Seguro)' : 
+                                             identityStatus === 'verified' || phoneVerified || emailVerified ? 'Intermedio' : 'Básico'}
+                                        </span>
+                                    </h3>
+                                    <p className="text-sm text-on-surface-variant leading-relaxed">
+                                        Las niñeras con verificación de identidad completa son 4 veces más propensas a recibir ofertas de empleo de los padres.
+                                    </p>
+                                </div>
+                            </GlassCard>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                <GlassCard className="rounded-[32px] p-8 shadow-md flex flex-col justify-between">
+                                    <div>
+                                        <div className="flex justify-between items-start gap-4 mb-4">
+                                            <h3 className="font-display-lg text-xl font-bold flex items-center gap-2">
+                                                <ShieldCheck className="text-primary" /> Identidad Oficial
+                                            </h3>
+                                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                                                identityStatus === 'verified' ? 'bg-green-100 text-green-700' :
+                                                identityStatus === 'pending' ? 'bg-amber-100 text-amber-700' :
+                                                identityStatus === 'rejected' ? 'bg-red-100 text-red-700' :
+                                                'bg-surface-container text-on-surface-variant'
+                                            }`}>
+                                                {identityStatus === 'verified' ? 'Verificado' :
+                                                 identityStatus === 'pending' ? 'Pendiente' :
+                                                 identityStatus === 'rejected' ? 'Rechazado' :
+                                                 'Sin Iniciar'}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
+                                            Sube una foto de tu documento oficial (Cédula de Identidad, DNI o Pasaporte) y una selfie clara con buena iluminación. Nuestro equipo validará los datos de forma manual.
+                                        </p>
+
+                                        {identityStatus === 'verified' && (
+                                            <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded-2xl text-xs flex gap-2 mb-6">
+                                                <Check size={16} className="shrink-0 text-green-600 mt-0.5" />
+                                                <p>
+                                                    <strong>Identidad Verificada:</strong> Tu cuenta cuenta con la insignia de identidad oficial. Las fotos de tus documentos se han eliminado permanentemente de nuestros servidores para proteger tu privacidad.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {identityStatus === 'pending' && (
+                                            <div className="p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl text-xs flex gap-2 mb-6">
+                                                <AlertTriangle size={16} className="shrink-0 text-amber-600 mt-0.5" />
+                                                <p>
+                                                    <strong>Documentos en revisión:</strong> Tus archivos están siendo validados por nuestro equipo. No es necesario realizar ninguna acción por el momento.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {identityStatus === 'rejected' && (
+                                            <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-2xl text-xs flex gap-2 mb-6">
+                                                <AlertTriangle size={16} className="shrink-0 text-red-600 mt-0.5" />
+                                                <p>
+                                                    <strong>Verificación rechazada:</strong> Los documentos anteriores fueron rechazados por el administrador (no legibles o datos no coincidentes). Por favor, sube archivos nuevos de buena calidad.
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {(identityStatus === 'none' || identityStatus === 'rejected') && (
+                                            <form onSubmit={handleIdentityUpload} className="space-y-4">
+                                                <div>
+                                                    <label className="block text-xs font-bold mb-2 uppercase text-outline">1. Foto del Documento de Identidad (DNI/Cédula/Pasaporte)</label>
+                                                    <input 
+                                                        type="file" 
+                                                        required
+                                                        accept="image/*,application/pdf"
+                                                        onChange={(e) => setDocumentFile(e.target.files[0])}
+                                                        className="w-full text-sm text-on-surface file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold mb-2 uppercase text-outline">2. Selfie de Validación (Foto de tu rostro actual)</label>
+                                                    <input 
+                                                        type="file" 
+                                                        required
+                                                        accept="image/*"
+                                                        onChange={(e) => setSelfieFile(e.target.files[0])}
+                                                        className="w-full text-sm text-on-surface file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                                                    />
+                                                </div>
+                                                <button 
+                                                    type="submit" 
+                                                    disabled={isUploadingDocs}
+                                                    className="w-full bg-primary text-white py-3.5 rounded-full font-bold shadow-md hover:bg-primary-container transition active:scale-95 text-sm disabled:opacity-50 mt-4"
+                                                >
+                                                    {isUploadingDocs ? 'Subiendo archivos...' : 'Enviar para Verificación'}
+                                                </button>
+                                            </form>
+                                        )}
+                                    </div>
+                                </GlassCard>
+
+                                <div className="space-y-6">
+                                    <GlassCard className="rounded-[32px] p-8 shadow-md">
+                                        <div className="flex justify-between items-start gap-4 mb-4">
+                                            <h3 className="font-display-lg text-xl font-bold flex items-center gap-2">
+                                                <User className="text-primary" size={20} /> Correo Electrónico
+                                            </h3>
+                                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                                                emailVerified ? 'bg-green-100 text-green-700' : 'bg-surface-container text-on-surface-variant'
+                                            }`}>
+                                                {emailVerified ? 'Verificado' : 'Sin Verificar'}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
+                                            El correo electrónico de tu cuenta es <span className="font-bold text-dark">{user?.email}</span>. Verifícalo para asegurar que recibes todas las alertas y reservas.
+                                        </p>
+
+                                        {emailVerified ? (
+                                            <div className="p-3.5 bg-green-50 border border-green-200 text-green-800 rounded-2xl text-xs flex gap-2">
+                                                <Check size={16} className="text-green-600" />
+                                                <span>¡Tu correo electrónico ya ha sido verificado!</span>
+                                            </div>
+                                        ) : emailStep === 'none' ? (
+                                            <button 
+                                                onClick={handleEmailVerifyRequest}
+                                                className="bg-primary text-white px-6 py-2.5 rounded-full text-xs font-bold hover:bg-primary-container transition shadow-sm"
+                                            >
+                                                Verificar Correo
+                                            </button>
+                                        ) : (
+                                            <form onSubmit={handleEmailVerifyConfirm} className="space-y-3">
+                                                <label className="block text-xs font-bold text-outline uppercase">Introduce el código temporal (consola backend):</label>
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        required
+                                                        placeholder="123456"
+                                                        value={emailCodeInput}
+                                                        onChange={(e) => setEmailCodeInput(e.target.value)}
+                                                        className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl w-32 focus:outline-none focus:border-primary text-sm font-bold text-center"
+                                                    />
+                                                    <button type="submit" className="bg-primary text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-primary-container transition">Confirmar</button>
+                                                </div>
+                                            </form>
+                                        )}
+                                    </GlassCard>
+
+                                    <GlassCard className="rounded-[32px] p-8 shadow-md">
+                                        <div className="flex justify-between items-start gap-4 mb-4">
+                                            <h3 className="font-display-lg text-xl font-bold flex items-center gap-2">
+                                                <Smartphone className="text-primary" size={20} /> Número Telefónico
+                                            </h3>
+                                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                                                phoneVerified ? 'bg-green-100 text-green-700' : 'bg-surface-container text-on-surface-variant'
+                                            }`}>
+                                                {phoneVerified ? 'Verificado' : 'Sin Verificar'}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-on-surface-variant mb-6 leading-relaxed">
+                                            El número telefónico nos permite contactarte rápidamente sobre ofertas de trabajo y reservas urgentes.
+                                        </p>
+
+                                        {phoneVerified ? (
+                                            <div className="p-3.5 bg-green-50 border border-green-200 text-green-800 rounded-2xl text-xs flex gap-2">
+                                                <Check size={16} className="text-green-600" />
+                                                <span>¡Tu número de teléfono ({phoneInput}) ya ha sido verificado!</span>
+                                            </div>
+                                        ) : phoneStep === 'input' ? (
+                                            <form onSubmit={handlePhoneVerifyRequest} className="space-y-3">
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="block text-xs font-bold text-outline uppercase">Número de teléfono:</label>
+                                                    <div className="flex gap-2">
+                                                        <input 
+                                                            type="text" 
+                                                            required
+                                                            placeholder="Ej: +591 70000000"
+                                                            value={phoneInput}
+                                                            onChange={(e) => setPhoneInput(e.target.value)}
+                                                            className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl flex-1 focus:outline-none focus:border-primary text-sm font-medium"
+                                                        />
+                                                        <button type="submit" className="bg-primary text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-primary-container transition">Solicitar Código</button>
+                                                    </div>
+                                                </div>
+                                            </form>
+                                        ) : (
+                                            <form onSubmit={handlePhoneVerifyConfirm} className="space-y-3">
+                                                <label className="block text-xs font-bold text-outline uppercase">Introduce el código de 6 dígitos (consola backend):</label>
+                                                <div className="flex gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        required
+                                                        placeholder="123456"
+                                                        value={phoneCodeInput}
+                                                        onChange={(e) => setPhoneCodeInput(e.target.value)}
+                                                        className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl w-32 focus:outline-none focus:border-primary text-sm font-bold text-center"
+                                                    />
+                                                    <button type="submit" className="bg-primary text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-primary-container transition">Confirmar</button>
+                                                    <button type="button" onClick={() => setPhoneStep('input')} className="bg-surface-container text-on-surface-variant px-4 py-3 rounded-2xl text-xs font-bold hover:bg-surface-container-highest transition">Cancelar</button>
+                                                </div>
+                                            </form>
+                                        )}
+                                    </GlassCard>
+
+                                    <GlassCard className="rounded-[32px] p-8 shadow-md">
+                                        <div className="flex justify-between items-start gap-4 mb-4">
+                                            <h3 className="font-display-lg text-xl font-bold flex items-center gap-2">
+                                                <Lock className="text-primary" size={20} /> Autenticación de 2 Factores (2FA)
+                                            </h3>
+                                            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                                                twoFactorEnabled ? 'bg-green-100 text-green-700' : 'bg-surface-container text-on-surface-variant'
+                                            }`}>
+                                                {twoFactorEnabled ? 'Activado' : 'Desactivado'}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-on-surface-variant mb-6 leading-relaxed font-body-sm">
+                                            Protege tu cuenta requiriendo un código dinámico generado en tu celular cada vez que inicias sesión.
+                                        </p>
+
+                                        {twoFactorEnabled ? (
+                                            twoFactorStep === 'disable' ? (
+                                                <form onSubmit={handle2FADisable} className="space-y-4">
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-outline uppercase mb-1">Contraseña actual:</label>
+                                                        <input 
+                                                            type="password" 
+                                                            required
+                                                            placeholder="Tu contraseña"
+                                                            value={twoFactorPasswordInput}
+                                                            onChange={(e) => setTwoFactorPasswordInput(e.target.value)}
+                                                            className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl w-full focus:outline-none focus:border-primary text-sm"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-bold text-outline uppercase mb-1">Código de autenticación (App):</label>
+                                                        <input 
+                                                            type="text" 
+                                                            required
+                                                            placeholder="123456"
+                                                            value={twoFactorCodeInput}
+                                                            onChange={(e) => setTwoFactorCodeInput(e.target.value)}
+                                                            className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl w-32 focus:outline-none focus:border-primary text-sm font-bold text-center"
+                                                        />
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button type="submit" className="bg-error text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-error/90 transition shadow-sm">Confirmar Desactivación</button>
+                                                        <button type="button" onClick={() => setTwoFactorStep('none')} className="bg-surface-container text-on-surface-variant px-4 py-3 rounded-2xl text-xs font-bold hover:bg-surface-container-highest transition">Cancelar</button>
+                                                    </div>
+                                                </form>
+                                            ) : (
+                                                <div>
+                                                    <div className="p-3.5 bg-green-50 border border-green-200 text-green-800 rounded-2xl text-xs flex gap-2 mb-4">
+                                                        <Check size={16} className="text-green-600 shrink-0 mt-0.5" />
+                                                        <span>¡La seguridad 2FA está activa! Tu cuenta está protegida.</span>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => setTwoFactorStep('disable')}
+                                                        className="bg-error-container text-on-error-container px-6 py-2.5 rounded-full text-xs font-bold hover:bg-error hover:text-white transition"
+                                                    >
+                                                        Desactivar 2FA
+                                                    </button>
+                                                </div>
+                                            )
+                                        ) : twoFactorStep === 'setup' ? (
+                                            <form onSubmit={handle2FAConfirm} className="space-y-4">
+                                                <p className="text-xs text-on-surface-variant leading-relaxed">
+                                                    Escanea este código QR con tu aplicación de autenticación o introduce la clave secreta manualmente.
+                                                </p>
+                                                {twoFactorQrCode && (
+                                                    <div className="flex justify-center p-4 bg-white rounded-2xl border border-outline-variant/20 max-w-[200px] mx-auto shadow-inner">
+                                                        <img src={twoFactorQrCode} alt="2FA QR Code" className="w-full h-auto" />
+                                                    </div>
+                                                )}
+                                                <div className="bg-surface-container p-3 rounded-xl border border-outline-variant/20 text-center select-all">
+                                                    <span className="text-xs font-bold text-outline uppercase block mb-1">Clave secreta manual:</span>
+                                                    <code className="text-sm font-bold text-primary">{twoFactorSecret}</code>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-bold text-outline uppercase mb-2">Ingresa el código generado para confirmar:</label>
+                                                    <div className="flex gap-2">
+                                                        <input 
+                                                            type="text" 
+                                                            required
+                                                            placeholder="123456"
+                                                            value={twoFactorCodeInput}
+                                                            onChange={(e) => setTwoFactorCodeInput(e.target.value)}
+                                                            className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl w-32 focus:outline-none focus:border-primary text-sm font-bold text-center"
+                                                        />
+                                                        <button type="submit" className="bg-primary text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-primary-container transition">Activar 2FA</button>
+                                                        <button type="button" onClick={() => setTwoFactorStep('none')} className="bg-surface-container text-on-surface-variant px-4 py-3 rounded-2xl text-xs font-bold hover:bg-surface-container-highest transition">Cancelar</button>
+                                                    </div>
+                                                </div>
+                                            </form>
+                                        ) : (
+                                            <button 
+                                                onClick={handle2FASetup}
+                                                className="bg-primary text-white px-6 py-2.5 rounded-full text-xs font-bold hover:bg-primary-container transition shadow-sm"
+                                            >
+                                                Configurar 2FA
+                                            </button>
+                                        )}
+                                    </GlassCard>
+                                </div>
+                            </div>
                         </div>
                     )}
                     </>
