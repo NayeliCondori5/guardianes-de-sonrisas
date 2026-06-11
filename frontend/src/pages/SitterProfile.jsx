@@ -636,18 +636,40 @@ const SitterProfile = () => {
                                         }
                                     </span>
                                 </div>
-                                <div className="flex justify-between items-center text-sm font-bold text-on-surface mb-2">
+                                <div className="flex justify-between items-center text-sm font-bold text-on-surface mb-1">
                                     <span>Horas contratadas:</span>
                                     <span>{calculatedHours} horas</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm font-bold text-on-surface mb-1">
+                                    <span>Número de niños:</span>
+                                    <span>{bookingForm.numChildren} niño(s)</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm font-bold text-on-surface mb-1">
+                                    <span>Subtotal:</span>
+                                    <span>
+                                        Bs. {((bookingForm.selectedServiceId === 'default' 
+                                            ? sitter.rate 
+                                            : sitterServices.find(s => s.id === bookingForm.selectedServiceId)?.rate || sitter.rate
+                                        ) * calculatedHours * bookingForm.numChildren).toFixed(2)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm font-bold text-on-surface mb-2">
+                                    <span>Uso de plataforma (10%):</span>
+                                    <span>
+                                        Bs. {(((bookingForm.selectedServiceId === 'default' 
+                                            ? sitter.rate 
+                                            : sitterServices.find(s => s.id === bookingForm.selectedServiceId)?.rate || sitter.rate
+                                        ) * calculatedHours * bookingForm.numChildren) * 0.10).toFixed(2)}
+                                    </span>
                                 </div>
                                 <div className="w-full h-px bg-outline-variant/20 my-2"></div>
                                 <div className="flex justify-between items-center text-lg font-bold text-dark">
                                     <span>Total Estimado:</span>
                                     <span className="text-primary text-xl">
-                                        Bs. {(bookingForm.selectedServiceId === 'default' 
+                                        Bs. {(((bookingForm.selectedServiceId === 'default' 
                                             ? sitter.rate 
                                             : sitterServices.find(s => s.id === bookingForm.selectedServiceId)?.rate || sitter.rate
-                                        ) * calculatedHours * bookingForm.numChildren}
+                                        ) * calculatedHours * bookingForm.numChildren) * 1.10).toFixed(2)}
                                     </span>
                                 </div>
                                 <p className="text-[10px] text-outline mt-2 italic">

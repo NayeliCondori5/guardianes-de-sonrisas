@@ -33,7 +33,8 @@ router.post('/', authenticateToken, async (req, res) => {
         const feeConfig = configRows.length > 0 ? configRows[0] : null;
         const feePercent = feeConfig ? parseFloat(feeConfig.value) : 10;
         
-        const subtotal = total_hours * sitter.hourly_rate;
+        const num_children = parseInt(req.body.num_children, 10) || 1;
+        const subtotal = total_hours * sitter.hourly_rate * num_children;
         const platform_fee = subtotal * (feePercent / 100);
         const total_amount = subtotal + platform_fee;
 
