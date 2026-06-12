@@ -1,6 +1,7 @@
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 // Configure PostgreSQL connection pool
 // En entorno local (desarrollo), puede que no necesites SSL, pero en Render (producción) sí.

@@ -82,7 +82,6 @@ const SitterProfile = () => {
                         verified: data.is_verified || false,
                         identityVerified: data.identity_status === 'approved',
                         emailVerified: data.email_verified || false,
-                        phoneVerified: data.phone_verified || false,
                         availability: data.availability || {
                             LUN: { manana: true, mediodia: false, tarde: true, noche: false },
                             MAR: { manana: true, mediodia: true, tarde: true, noche: false },
@@ -322,11 +321,7 @@ const SitterProfile = () => {
                                     ✉️ Email Verificado
                                 </span>
                             )}
-                            {sitter.phoneVerified && (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200">
-                                    📱 Teléfono Verificado
-                                </span>
-                            )}
+
                         </div>
 
                         {sitter.verified ? (

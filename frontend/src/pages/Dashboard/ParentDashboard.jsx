@@ -18,21 +18,9 @@ const ParentDashboard = () => {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     // Verification states
-    const [phoneInput, setPhoneInput] = useState(user?.phone || '');
-    const [phoneStep, setPhoneStep] = useState('input');
-    const [phoneCodeInput, setPhoneCodeInput] = useState('');
-    const [phoneVerified, setPhoneVerified] = useState(0);
-
     const [emailStep, setEmailStep] = useState('none');
     const [emailCodeInput, setEmailCodeInput] = useState('');
     const [emailVerified, setEmailVerified] = useState(0);
-
-    const [twoFactorEnabled, setTwoFactorEnabled] = useState(0);
-    const [twoFactorStep, setTwoFactorStep] = useState('none');
-    const [twoFactorQrCode, setTwoFactorQrCode] = useState('');
-    const [twoFactorSecret, setTwoFactorSecret] = useState('');
-    const [twoFactorCodeInput, setTwoFactorCodeInput] = useState('');
-    const [twoFactorPasswordInput, setTwoFactorPasswordInput] = useState('');
 
     const [identityVerified, setIdentityVerified] = useState(0);
     const [identityVerifiedAt, setIdentityVerifiedAt] = useState('');
@@ -132,10 +120,7 @@ const ParentDashboard = () => {
                     budget: dbUser.budget || '',
                     payment_pref: dbUser.payment_pref || 'Transferencia / Depósito'
                 });
-                setPhoneInput(dbUser.phone || '');
-                setPhoneVerified(dbUser.phone_verified || 0);
                 setEmailVerified(dbUser.email_verified || 0);
-                setTwoFactorEnabled(dbUser.two_factor_enabled || 0);
                 setIdentityVerified(dbUser.identity_verified || 0);
                 setIdentityVerifiedAt(dbUser.identity_verified_at || '');
             }
@@ -303,66 +288,7 @@ const ParentDashboard = () => {
         }
     };
 
-    const handlePhoneVerifyRequest = async (e) => {
-        e.preventDefault();
-        if (!phoneInput) {
-            setModal({
-                isOpen: true,
-                title: "Teléfono Requerido",
-                message: "Por favor ingresa un número de teléfono.",
-                type: 'error'
-            });
-            return;
-        }
 
-        try {
-            const response = await api.post('/users/verify-phone/request', { phone: phoneInput });
-            if (response.data && response.data.success) {
-                setPhoneStep('confirm');
-                setModal({
-                    isOpen: true,
-                    title: "Código Enviado por SMS",
-                    message: "Se envió un código de verificación por mensaje de texto a tu número de teléfono. Ingrésalo a continuación.",
-                    type: 'success'
-                });
-            }
-        } catch (err) {
-            console.error(err);
-            setModal({
-                isOpen: true,
-                title: "Error",
-                message: err.response?.data?.message || "No se pudo solicitar el código.",
-                type: 'error'
-            });
-        }
-    };
-
-    const handlePhoneVerifyConfirm = async (e) => {
-        e.preventDefault();
-        if (!phoneCodeInput) return;
-
-        try {
-            const response = await api.post('/users/verify-phone/confirm', { code: phoneCodeInput });
-            if (response.data && response.data.success) {
-                setPhoneVerified(1);
-                setPhoneStep('input');
-                setModal({
-                    isOpen: true,
-                    title: "¡Teléfono Verificado!",
-                    message: "Tu número de teléfono ha sido verificado con éxito.",
-                    type: 'success'
-                });
-            }
-        } catch (err) {
-            console.error(err);
-            setModal({
-                isOpen: true,
-                title: "Error",
-                message: err.response?.data?.message || "Código incorrecto.",
-                type: 'error'
-            });
-        }
-    };
 
     const handleEmailVerifyRequest = async () => {
         try {
@@ -414,82 +340,7 @@ const ParentDashboard = () => {
         }
     };
 
-    const handle2FASetup = async () => {
-        try {
-            const response = await api.post('/users/2fa/setup');
-            if (response.data && response.data.success) {
-                setTwoFactorQrCode(response.data.qrCode);
-                setTwoFactorSecret(response.data.secret);
-                setTwoFactorStep('setup');
-            }
-        } catch (err) {
-            console.error('Error in 2FA setup:', err);
-            setModal({
-                isOpen: true,
-                title: "Error",
-                message: err.response?.data?.message || "No se pudo iniciar la configuración de 2FA.",
-                type: 'error'
-            });
-        }
-    };
 
-    const handle2FAConfirm = async (e) => {
-        e.preventDefault();
-        if (!twoFactorCodeInput) return;
-        try {
-            const response = await api.post('/users/2fa/confirm', { code: twoFactorCodeInput });
-            if (response.data && response.data.success) {
-                setTwoFactorEnabled(1);
-                setTwoFactorStep('none');
-                setTwoFactorCodeInput('');
-                setModal({
-                    isOpen: true,
-                    title: "¡2FA Activado!",
-                    message: "La autenticación de dos factores ha sido activada exitosamente.",
-                    type: 'success'
-                });
-            }
-        } catch (err) {
-            console.error(err);
-            setModal({
-                isOpen: true,
-                title: "Error",
-                message: err.response?.data?.message || "Código incorrecto.",
-                type: 'error'
-            });
-        }
-    };
-
-    const handle2FADisable = async (e) => {
-        e.preventDefault();
-        if (!twoFactorCodeInput || !twoFactorPasswordInput) return;
-        try {
-            const response = await api.post('/users/2fa/disable', { 
-                code: twoFactorCodeInput, 
-                password: twoFactorPasswordInput 
-            });
-            if (response.data && response.data.success) {
-                setTwoFactorEnabled(0);
-                setTwoFactorStep('none');
-                setTwoFactorCodeInput('');
-                setTwoFactorPasswordInput('');
-                setModal({
-                    isOpen: true,
-                    title: "2FA Desactivado",
-                    message: "La autenticación de dos factores ha sido desactivada.",
-                    type: 'success'
-                });
-            }
-        } catch (err) {
-            console.error(err);
-            setModal({
-                isOpen: true,
-                title: "Error",
-                message: err.response?.data?.message || "Código o contraseña incorrectos.",
-                type: 'error'
-            });
-        }
-    };
 
     return (
         <div className="min-h-screen bg-background text-on-surface">
@@ -891,161 +742,6 @@ const ParentDashboard = () => {
                                 </GlassCard>
 
                                 <GlassCard className="rounded-[32px] p-8 shadow-md">
-                                    <div className="flex justify-between items-start gap-4 mb-4">
-                                        <h3 className="font-display-lg text-xl font-bold flex items-center gap-2">
-                                            <Smartphone className="text-primary" size={20} /> Número Telefónico
-                                        </h3>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                                            phoneVerified ? 'bg-green-100 text-green-700' : 'bg-surface-container text-on-surface-variant'
-                                        }`}>
-                                            {phoneVerified ? 'Verificado' : 'Sin Verificar'}
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-on-surface-variant mb-6 leading-relaxed font-body-sm">
-                                        Verifica tu número telefónico para que los cuidadores puedan comunicarse contigo sobre contrataciones pendientes.
-                                    </p>
-
-                                    {phoneVerified ? (
-                                        <div className="p-3.5 bg-green-50 border border-green-200 text-green-800 rounded-2xl text-xs flex gap-2">
-                                            <Check size={16} className="text-green-600" />
-                                            <span>¡Tu número de teléfono ({phoneInput}) ya ha sido verificado!</span>
-                                        </div>
-                                    ) : phoneStep === 'input' ? (
-                                        <form onSubmit={handlePhoneVerifyRequest} className="space-y-3">
-                                            <div className="flex flex-col gap-1">
-                                                <label className="block text-xs font-bold text-outline uppercase">Número de teléfono:</label>
-                                                <div className="flex gap-2">
-                                                    <input 
-                                                        type="text" 
-                                                        required
-                                                        placeholder="Ej: +591 70000000"
-                                                        value={phoneInput}
-                                                        onChange={(e) => setPhoneInput(e.target.value)}
-                                                        className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl flex-1 focus:outline-none focus:border-primary text-sm font-medium"
-                                                    />
-                                                    <button type="submit" className="bg-primary text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-primary-container transition">Solicitar Código</button>
-                                                </div>
-                                            </div>
-                                        </form>
-                                    ) : (
-                                        <form onSubmit={handlePhoneVerifyConfirm} className="space-y-3">
-                                            <label className="block text-xs font-bold text-outline uppercase">Introduce el código de 6 dígitos (consola backend):</label>
-                                            <div className="flex gap-2">
-                                                <input 
-                                                    type="text" 
-                                                    required
-                                                    placeholder="123456"
-                                                    value={phoneCodeInput}
-                                                    onChange={(e) => setPhoneCodeInput(e.target.value)}
-                                                    className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl w-32 focus:outline-none focus:border-primary text-sm font-bold text-center"
-                                                />
-                                                <button type="submit" className="bg-primary text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-primary-container transition">Confirmar</button>
-                                                <button type="button" onClick={() => setPhoneStep('input')} className="bg-surface-container text-on-surface-variant px-4 py-3 rounded-2xl text-xs font-bold hover:bg-surface-container-highest transition">Cancelar</button>
-                                            </div>
-                                        </form>
-                                    )}
-                                </GlassCard>
-
-                                <GlassCard className="rounded-[32px] p-8 shadow-md lg:col-span-2">
-                                    <div className="flex justify-between items-start gap-4 mb-4">
-                                        <h3 className="font-display-lg text-xl font-bold flex items-center gap-2">
-                                            <LockIcon className="text-primary" size={20} /> Autenticación de 2 Factores (2FA)
-                                        </h3>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                                            twoFactorEnabled ? 'bg-green-100 text-green-700' : 'bg-surface-container text-on-surface-variant'
-                                        }`}>
-                                            {twoFactorEnabled ? 'Activado' : 'Desactivado'}
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-on-surface-variant mb-6 leading-relaxed font-body-sm">
-                                        Protege tu cuenta requiriendo un código dinámico generado en tu celular cada vez que inicias sesión.
-                                    </p>
-
-                                    {twoFactorEnabled ? (
-                                        twoFactorStep === 'disable' ? (
-                                            <form onSubmit={handle2FADisable} className="space-y-4">
-                                                <div>
-                                                    <label className="block text-xs font-bold text-outline uppercase mb-1">Contraseña actual:</label>
-                                                    <input 
-                                                        type="password" 
-                                                        required
-                                                        placeholder="Tu contraseña"
-                                                        value={twoFactorPasswordInput}
-                                                        onChange={(e) => setTwoFactorPasswordInput(e.target.value)}
-                                                        className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl w-full focus:outline-none focus:border-primary text-sm"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-bold text-outline uppercase mb-1">Código de autenticación (App):</label>
-                                                    <input 
-                                                        type="text" 
-                                                        required
-                                                        placeholder="123456"
-                                                        value={twoFactorCodeInput}
-                                                        onChange={(e) => setTwoFactorCodeInput(e.target.value)}
-                                                        className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl w-32 focus:outline-none focus:border-primary text-sm font-bold text-center"
-                                                    />
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <button type="submit" className="bg-error text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-error/90 transition shadow-sm">Confirmar Desactivación</button>
-                                                    <button type="button" onClick={() => setTwoFactorStep('none')} className="bg-surface-container text-on-surface-variant px-4 py-3 rounded-2xl text-xs font-bold hover:bg-surface-container-highest transition">Cancelar</button>
-                                                </div>
-                                            </form>
-                                        ) : (
-                                            <div>
-                                                <div className="p-3.5 bg-green-50 border border-green-200 text-green-800 rounded-2xl text-xs flex gap-2 mb-4">
-                                                    <Check size={16} className="text-green-600 shrink-0 mt-0.5" />
-                                                    <span>¡La seguridad 2FA está activa! Tu cuenta está protegida.</span>
-                                                </div>
-                                                <button 
-                                                    onClick={() => setTwoFactorStep('disable')}
-                                                    className="bg-error-container text-on-error-container px-6 py-2.5 rounded-full text-xs font-bold hover:bg-error hover:text-white transition"
-                                                >
-                                                    Desactivar 2FA
-                                                </button>
-                                            </div>
-                                        )
-                                    ) : twoFactorStep === 'setup' ? (
-                                        <form onSubmit={handle2FAConfirm} className="space-y-4">
-                                            <p className="text-xs text-on-surface-variant leading-relaxed">
-                                                Escanea este código QR con tu aplicación de autenticación o introduce la clave secreta manualmente.
-                                            </p>
-                                            {twoFactorQrCode && (
-                                                <div className="flex justify-center p-4 bg-white rounded-2xl border border-outline-variant/20 max-w-[200px] mx-auto shadow-inner">
-                                                    <img src={twoFactorQrCode} alt="2FA QR Code" className="w-full h-auto" />
-                                                </div>
-                                            )}
-                                            <div className="bg-surface-container p-3 rounded-xl border border-outline-variant/20 text-center select-all">
-                                                <span className="text-xs font-bold text-outline uppercase block mb-1">Clave secreta manual:</span>
-                                                <code className="text-sm font-bold text-primary">{twoFactorSecret}</code>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-bold text-outline uppercase mb-2">Ingresa el código generado para confirmar:</label>
-                                                <div className="flex gap-2">
-                                                    <input 
-                                                        type="text" 
-                                                        required
-                                                        placeholder="123456"
-                                                        value={twoFactorCodeInput}
-                                                        onChange={(e) => setTwoFactorCodeInput(e.target.value)}
-                                                        className="p-3 bg-surface-container border border-outline-variant/30 rounded-2xl w-32 focus:outline-none focus:border-primary text-sm font-bold text-center"
-                                                    />
-                                                    <button type="submit" className="bg-primary text-white px-6 py-3 rounded-2xl text-xs font-bold hover:bg-primary-container transition">Activar 2FA</button>
-                                                    <button type="button" onClick={() => setTwoFactorStep('none')} className="bg-surface-container text-on-surface-variant px-4 py-3 rounded-2xl text-xs font-bold hover:bg-surface-container-highest transition">Cancelar</button>
-                                                </div>
-                                            </div>
-                                        </form>
-                                    ) : (
-                                        <button 
-                                            onClick={handle2FASetup}
-                                            className="bg-primary text-white px-6 py-2.5 rounded-full text-xs font-bold hover:bg-primary-container transition shadow-sm"
-                                        >
-                                            Configurar 2FA
-                                        </button>
-                                    )}
-                                </GlassCard>
-
-                                <GlassCard className="rounded-[32px] p-8 shadow-md lg:col-span-2">
                                     <div className="flex justify-between items-start gap-4 mb-4">
                                         <h3 className="font-display-lg text-xl font-bold flex items-center gap-2">
                                             <ShieldCheck className="text-primary" size={20} /> Verificación Biométrica de Identidad

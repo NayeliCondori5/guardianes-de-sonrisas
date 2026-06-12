@@ -115,14 +115,6 @@ router.post('/login', async (req, res) => {
             if (!isMatch) return res.status(401).json({ success: false, message: 'Credenciales inválidas' });
         }
 
-        if (user.two_factor_enabled === 1 || user.two_factor_enabled === true) {
-            return res.json({
-                success: true,
-                requires2FA: true,
-                userId: user.id
-            });
-        }
-
         const tokens = await generateTokens(user);
         res.json({ 
             success: true, 
@@ -135,55 +127,6 @@ router.post('/login', async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Error en el servidor' });
-    }
-});
-
-router.post('/2fa/verify', async (req, res) => {
-    const { userId, code } = req.body;
-    if (!userId || !code) {
-        return res.status(400).json({ success: false, message: 'ID de usuario y código requeridos.' });
-    }
-
-    try {
-        const { rows } = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
-        const user = rows.length > 0 ? rows[0] : null;
-        if (!user || user.is_active === 0) {
-            return res.status(404).json({ success: false, message: 'Usuario no encontrado o inactivo.' });
-        }
-
-        if (!user.two_factor_enabled || !user.totp_secret_encrypted) {
-            return res.status(400).json({ success: false, message: '2FA no está configurado para este usuario.' });
-        }
-
-        const { decrypt } = require('../utils/encryption');
-        const decryptedSecret = decrypt(user.totp_secret_encrypted);
-        if (!decryptedSecret) {
-            return res.status(500).json({ success: false, message: 'Error interno de descifrado.' });
-        }
-
-        const speakeasy = require('speakeasy');
-        const verified = speakeasy.totp.verify({
-            secret: decryptedSecret,
-            encoding: 'base32',
-            token: code,
-            window: 1
-        });
-
-        if (!verified) {
-            return res.status(400).json({ success: false, message: 'Código de verificación incorrecto.' });
-        }
-
-        const tokens = await generateTokens(user);
-        res.json({
-            success: true,
-            data: {
-                ...tokens,
-                user: { id: user.id, email: user.email, role: user.role, full_name: user.full_name, avatar_url: user.avatar_url }
-            }
-        });
-    } catch (err) {
-        console.error('Error al verificar código 2FA:', err);
-        res.status(500).json({ success: false, message: 'Error interno en el servidor.' });
     }
 });
 

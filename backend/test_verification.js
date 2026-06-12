@@ -126,59 +126,6 @@ async function testEmailVerification() {
     console.log('     Luego ejecuta: POST /api/users/verify-email/confirm { "code": "CÓDIGO" }');
 }
 
-async function testPhoneVerification() {
-    section('4. Verificación de Número Telefónico');
-
-    // 4a. Solicitar código con número de prueba
-    const phone = '+591 70000001';
-    const reqRes = await request('POST', '/users/verify-phone/request', { phone }, authToken);
-    if (reqRes.status === 200 && reqRes.data.success) {
-        ok(`Código de SMS solicitado para ${phone}`);
-    } else if (reqRes.status === 429) {
-        ok('Rate limit activo — comportamiento correcto');
-        return;
-    } else {
-        fail('No se pudo solicitar código de SMS', JSON.stringify(reqRes.data));
-        return;
-    }
-
-    // 4b. Intentar confirmar con código inválido
-    const badRes = await request('POST', '/users/verify-phone/confirm', { code: '000000' }, authToken);
-    if (badRes.status === 400 && !badRes.data.success) {
-        ok('Código inválido correctamente rechazado (400)');
-    } else {
-        fail('Código inválido debería ser rechazado', JSON.stringify(badRes.data));
-    }
-
-    console.log('\n  ⚠️  Para completar: busca en la consola del backend:');
-    console.log('     [MOCK SMS] Código de verificación para usuario ... (+591 70000001)');
-}
-
-async function test2FASetup() {
-    section('5. Configuración de Autenticación 2FA');
-
-    // 5a. Iniciar setup
-    const setupRes = await request('POST', '/users/2fa/setup', {}, authToken);
-    if (setupRes.status === 200 && setupRes.data.success && setupRes.data.qrCode && setupRes.data.secret) {
-        ok('Setup de 2FA iniciado — QR y secreto generados');
-        ok(`Secreto base32: ${setupRes.data.secret.substring(0, 10)}...`);
-    } else {
-        fail('No se pudo iniciar setup de 2FA', JSON.stringify(setupRes.data));
-        return;
-    }
-
-    // 5b. Intentar confirmar con código inválido
-    const badConfirm = await request('POST', '/users/2fa/confirm', { code: '000000' }, authToken);
-    if (badConfirm.status === 400 && !badConfirm.data.success) {
-        ok('Código TOTP inválido correctamente rechazado (400)');
-    } else {
-        fail('Código TOTP inválido debería ser rechazado', JSON.stringify(badConfirm.data));
-    }
-
-    console.log('\n  ⚠️  Para activar 2FA: escanea el QR generado con Google Authenticator');
-    console.log('     y llama a POST /api/users/2fa/confirm con el código de 6 dígitos.');
-}
-
 async function testRateLimiting() {
     section('6. Rate Limiting (Anti-Spam OTP)');
 
@@ -203,8 +150,6 @@ async function testUnauthorized() {
 
     const endpoints = [
         { method: 'POST', path: '/users/verify-email/request' },
-        { method: 'POST', path: '/users/verify-phone/request', body: { phone: '+591 70000000' } },
-        { method: 'POST', path: '/users/2fa/setup' },
     ];
 
     for (const ep of endpoints) {
@@ -232,8 +177,6 @@ async function run() {
 
     await testProfile();
     await testEmailVerification();
-    await testPhoneVerification();
-    await test2FASetup();
     await testRateLimiting();
     await testUnauthorized();
 
