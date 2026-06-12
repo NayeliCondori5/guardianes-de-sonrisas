@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '../../components/common/Navbar';
 import GlassCard from '../../components/common/GlassCard';
-import { Users, BookOpen, DollarSign, Activity, Clock, Trash2, Edit, Plus, Search, X, AlertTriangle, Check, Briefcase, CheckCircle, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Users, BookOpen, DollarSign, Activity, Clock, Trash2, Edit, Plus, Search, X, AlertTriangle, Check, Briefcase, CheckCircle, ShieldCheck, ShieldOff, CreditCard, Banknote, Eye, ZoomIn } from 'lucide-react';
 import api from '../../services/api';
 
 const AdminDashboard = () => {
@@ -42,6 +42,95 @@ const AdminDashboard = () => {
     const [isVerifyIdentityModalOpen, setIsVerifyIdentityModalOpen] = useState(false);
     const [selectedSitterForVerification, setSelectedSitterForVerification] = useState(null);
     const [isProcessingVerification, setIsProcessingVerification] = useState(false);
+
+    // Payments validation state
+    const [pendingPayments, setPendingPayments] = useState([]);
+    const [isLoadingPayments, setIsLoadingPayments] = useState(false);
+    const [lightboxUrl, setLightboxUrl] = useState(null);
+    const [paymentNotesInput, setPaymentNotesInput] = useState('');
+    const [isPaymentActionLoading, setIsPaymentActionLoading] = useState(false);
+
+    // Payouts state
+    const [payouts, setPayouts] = useState([]);
+    const [isLoadingPayouts, setIsLoadingPayouts] = useState(false);
+    const [selectedPayoutForPay, setSelectedPayoutForPay] = useState(null);
+    const [payoutReferenceInput, setPayoutReferenceInput] = useState('');
+    const [isMarkingPaid, setIsMarkingPaid] = useState(false);
+    const [payoutNotesInput, setPayoutNotesInput] = useState('');
+
+    const refreshPendingPayments = async () => {
+        setIsLoadingPayments(true);
+        try {
+            const response = await api.get('/admin/payments/pending');
+            if (response.data && response.data.success) {
+                setPendingPayments(response.data.data);
+            }
+        } catch (err) {
+            console.error('Error fetching pending payments:', err);
+        } finally {
+            setIsLoadingPayments(false);
+        }
+    };
+
+    const refreshPayouts = async () => {
+        setIsLoadingPayouts(true);
+        try {
+            const response = await api.get('/admin/payouts');
+            if (response.data && response.data.success) {
+                setPayouts(response.data.data);
+            }
+        } catch (err) {
+            console.error('Error fetching payouts:', err);
+        } finally {
+            setIsLoadingPayouts(false);
+        }
+    };
+
+    const handleConfirmPayment = async (paymentId, notes) => {
+        setIsPaymentActionLoading(true);
+        try {
+            await api.put(`/admin/payments/${paymentId}/confirm`, { notes });
+            await refreshPendingPayments();
+            await refreshPayouts();
+            refreshData();
+        } catch (err) {
+            console.error('Error confirming payment:', err);
+        } finally {
+            setIsPaymentActionLoading(false);
+        }
+    };
+
+    const handleRejectPayment = async (paymentId, notes) => {
+        setIsPaymentActionLoading(true);
+        try {
+            await api.put(`/admin/payments/${paymentId}/reject`, { notes: notes || 'Comprobante inválido o no legible' });
+            await refreshPendingPayments();
+            refreshData();
+        } catch (err) {
+            console.error('Error rejecting payment:', err);
+        } finally {
+            setIsPaymentActionLoading(false);
+        }
+    };
+
+    const handleMarkPayoutPaid = async () => {
+        if (!selectedPayoutForPay || !payoutReferenceInput.trim()) return;
+        setIsMarkingPaid(true);
+        try {
+            await api.put(`/admin/payouts/${selectedPayoutForPay.id}/pay`, {
+                reference: payoutReferenceInput.trim(),
+                notes: payoutNotesInput.trim() || null
+            });
+            setSelectedPayoutForPay(null);
+            setPayoutReferenceInput('');
+            setPayoutNotesInput('');
+            await refreshPayouts();
+        } catch (err) {
+            console.error('Error marking payout as paid:', err);
+        } finally {
+            setIsMarkingPaid(false);
+        }
+    };
 
     const refreshServices = async () => {
         try {
@@ -172,6 +261,8 @@ const AdminDashboard = () => {
 
     useEffect(() => {
         refreshData();
+        refreshPendingPayments();
+        refreshPayouts();
     }, []);
 
     const openModal = (mode, user = null) => {
@@ -266,6 +357,28 @@ const AdminDashboard = () => {
                         {allSitters.filter(s => !s.is_verified).length > 0 && (
                             <span className="px-2 py-0.5 bg-amber-500 text-white text-[10px] rounded-full">
                                 {allSitters.filter(s => !s.is_verified).length}
+                            </span>
+                        )}
+                    </button>
+                    <button 
+                        onClick={() => { setActiveTab('validate-payments'); refreshPendingPayments(); }} 
+                        className={`pb-3 font-bold text-sm transition-all px-4 flex items-center gap-1.5 ${activeTab === 'validate-payments' ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-primary'}`}
+                    >
+                        <CreditCard size={15} /> Validar Pagos
+                        {pendingPayments.length > 0 && (
+                            <span className="px-2 py-0.5 bg-error text-white text-[10px] rounded-full">
+                                {pendingPayments.length}
+                            </span>
+                        )}
+                    </button>
+                    <button 
+                        onClick={() => { setActiveTab('payouts'); refreshPayouts(); }} 
+                        className={`pb-3 font-bold text-sm transition-all px-4 flex items-center gap-1.5 ${activeTab === 'payouts' ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-primary'}`}
+                    >
+                        <Banknote size={15} /> Liquidaciones
+                        {payouts.filter(p => p.status === 'pending').length > 0 && (
+                            <span className="px-2 py-0.5 bg-green-600 text-white text-[10px] rounded-full">
+                                {payouts.filter(p => p.status === 'pending').length}
                             </span>
                         )}
                     </button>
@@ -634,7 +747,315 @@ const AdminDashboard = () => {
                     </GlassCard>
                 )}
 
+                {/* ===== Validar Pagos Tab ===== */}
+                {activeTab === 'validate-payments' && (
+                    <GlassCard className="rounded-[32px] p-8 mb-10">
+                        <div className="mb-8">
+                            <h2 className="font-display-lg text-2xl font-bold flex items-center gap-2">
+                                <CreditCard className="text-primary"/> Validación de Comprobantes de Pago
+                            </h2>
+                            <p className="text-on-surface-variant text-sm mt-1">
+                                Revisa el comprobante de cada padre. Si el pago es válido, apruébalo para confirmar la reserva y generar automáticamente la liquidación del 90% al cuidador. El 10% queda como comisión de la plataforma.
+                            </p>
+                        </div>
+
+                        {isLoadingPayments ? (
+                            <div className="flex items-center justify-center py-16">
+                                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
+                            </div>
+                        ) : pendingPayments.length === 0 ? (
+                            <div className="text-center py-16">
+                                <div className="w-16 h-16 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto mb-4">
+                                    <CheckCircle size={32} />
+                                </div>
+                                <p className="font-bold text-lg text-on-surface">Sin comprobantes pendientes</p>
+                                <p className="text-on-surface-variant text-sm mt-2">Todos los pagos han sido revisados.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {pendingPayments.map(payment => (
+                                    <div key={payment.id} className="rounded-[24px] border border-outline-variant/30 bg-surface-container-low/40 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                                        {/* Header */}
+                                        <div className="p-5 border-b border-outline-variant/20 flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="font-bold text-on-surface text-base">{payment.parentName}</p>
+                                                <p className="text-xs text-on-surface-variant">{payment.parentEmail}</p>
+                                                <p className="text-xs text-on-surface-variant mt-1">
+                                                    Cuidador: <span className="font-bold text-dark">{payment.sitterName}</span>
+                                                </p>
+                                            </div>
+                                            <div className="text-right flex-shrink-0">
+                                                <p className="font-bold text-xl text-primary">Bs. {parseFloat(payment.amount || 0).toFixed(2)}</p>
+                                                <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">
+                                                    {payment.method === 'qr' ? 'QR Simple' : 'Transferencia'}
+                                                </p>
+                                                <span className="inline-block mt-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold uppercase">
+                                                    Pendiente
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Receipt Image */}
+                                        <div className="p-5 bg-black/5 flex items-center justify-center min-h-[200px] relative group">
+                                            {payment.receipt_url ? (
+                                                <>
+                                                    <img
+                                                        src={payment.receipt_url}
+                                                        alt="Comprobante de pago"
+                                                        className="max-h-52 max-w-full object-contain rounded-xl shadow-md cursor-zoom-in"
+                                                        onClick={() => setLightboxUrl(payment.receipt_url)}
+                                                    />
+                                                    <button
+                                                        onClick={() => setLightboxUrl(payment.receipt_url)}
+                                                        className="absolute top-3 right-3 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        title="Ver a tamaño completo"
+                                                    >
+                                                        <ZoomIn size={16} />
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <div className="text-center">
+                                                    <Eye size={32} className="text-outline mx-auto mb-2" />
+                                                    <p className="text-sm text-on-surface-variant">Sin comprobante adjunto</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Notes + Actions */}
+                                        <div className="p-5 space-y-3">
+                                            <textarea
+                                                placeholder="Notas opcionales (ej: número de transacción, observaciones...)"
+                                                rows={2}
+                                                className="w-full p-3 rounded-xl border border-outline-variant/30 bg-surface-container-low text-sm outline-none focus:ring-2 focus:ring-primary transition resize-none"
+                                                id={`notes-${payment.id}`}
+                                            />
+                                            <div className="flex gap-3">
+                                                <button
+                                                    disabled={isPaymentActionLoading}
+                                                    onClick={() => {
+                                                        const notes = document.getElementById(`notes-${payment.id}`)?.value || '';
+                                                        handleRejectPayment(payment.id, notes);
+                                                    }}
+                                                    className="flex-1 bg-error-container text-on-error-container py-3 rounded-full text-sm font-bold hover:bg-error hover:text-white transition active:scale-95 flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                                >
+                                                    <X size={15} /> Rechazar
+                                                </button>
+                                                <button
+                                                    disabled={isPaymentActionLoading}
+                                                    onClick={() => {
+                                                        const notes = document.getElementById(`notes-${payment.id}`)?.value || '';
+                                                        handleConfirmPayment(payment.id, notes);
+                                                    }}
+                                                    className="flex-[2] bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 rounded-full text-sm font-bold hover:from-green-600 hover:to-emerald-700 transition active:scale-95 flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
+                                                >
+                                                    {isPaymentActionLoading ? (
+                                                        <span className="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+                                                    ) : (
+                                                        <><Check size={15} /> Confirmar Pago (90% al cuidador)</>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </GlassCard>
+                )}
+
+                {/* ===== Liquidaciones Tab ===== */}
+                {activeTab === 'payouts' && (
+                    <GlassCard className="rounded-[32px] p-8 mb-10">
+                        <div className="mb-8">
+                            <h2 className="font-display-lg text-2xl font-bold flex items-center gap-2">
+                                <Banknote className="text-primary"/> Liquidaciones a Cuidadores
+                            </h2>
+                            <p className="text-on-surface-variant text-sm mt-1">
+                                Estas son las transferencias pendientes al 90% que debes enviar manualmente a cada cuidador. Una vez hagas la transferencia, regístrala aquí con el código de referencia.
+                            </p>
+                        </div>
+
+                        {isLoadingPayouts ? (
+                            <div className="flex items-center justify-center py-16">
+                                <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary"></div>
+                            </div>
+                        ) : payouts.length === 0 ? (
+                            <div className="text-center py-16">
+                                <div className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
+                                    <Banknote size={32} />
+                                </div>
+                                <p className="font-bold text-lg text-on-surface">Sin liquidaciones registradas</p>
+                                <p className="text-on-surface-variant text-sm mt-2">Cuando apruebes un pago, aparecerá aquí la liquidación correspondiente.</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="border-b border-outline-variant/30 text-xs font-bold text-outline uppercase tracking-wider">
+                                            <th className="p-4">Cuidador</th>
+                                            <th className="p-4">Monto a Transferir</th>
+                                            <th className="p-4">Fecha Generación</th>
+                                            <th className="p-4">Estado</th>
+                                            <th className="p-4">Referencia</th>
+                                            <th className="p-4 text-center">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {payouts.map(payout => (
+                                            <tr key={payout.id} className="border-b border-outline-variant/10 hover:bg-primary/5 transition-colors">
+                                                <td className="p-4">
+                                                    <p className="font-bold text-on-surface text-sm">{payout.sitterName}</p>
+                                                    <p className="text-xs text-on-surface-variant">{payout.sitterEmail}</p>
+                                                </td>
+                                                <td className="p-4">
+                                                    <p className="font-bold text-xl text-primary">Bs. {parseFloat(payout.amount || 0).toFixed(2)}</p>
+                                                    <p className="text-[10px] text-on-surface-variant">90% del pago recibido</p>
+                                                </td>
+                                                <td className="p-4 text-sm text-on-surface-variant">
+                                                    {payout.requested_at ? new Date(payout.requested_at).toLocaleDateString('es-BO', { day:'2-digit', month:'short', year:'numeric' }) : '---'}
+                                                </td>
+                                                <td className="p-4">
+                                                    {payout.status === 'paid' ? (
+                                                        <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-green-100 text-green-700">
+                                                            <CheckCircle size={12} /> Pagado
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 animate-pulse">
+                                                            <Clock size={12} /> Pendiente
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-sm text-on-surface-variant">
+                                                    {payout.reference || (payout.status === 'pending' ? <span className="italic text-outline">Sin registrar</span> : '---')}
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    {payout.status === 'pending' && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setSelectedPayoutForPay(payout);
+                                                                setPayoutReferenceInput('');
+                                                                setPayoutNotesInput('');
+                                                            }}
+                                                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-full text-xs font-bold hover:bg-primary-container transition active:scale-95 shadow-sm"
+                                                        >
+                                                            <Banknote size={13} /> Registrar Pago
+                                                        </button>
+                                                    )}
+                                                    {payout.status === 'paid' && (
+                                                        <span className="text-xs text-on-surface-variant">
+                                                            {payout.paid_at ? new Date(payout.paid_at).toLocaleDateString('es-BO') : 'Completado'}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </GlassCard>
+                )}
+
             </div>
+
+            {/* Lightbox for Receipt Images */}
+            {lightboxUrl && (
+                <div className="fixed inset-0 z-[300] bg-black/80 flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setLightboxUrl(null)}>
+                    <img src={lightboxUrl} alt="Comprobante" className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg shadow-2xl" />
+                    <button className="absolute top-6 right-6 text-white bg-white/20 p-2 rounded-full hover:bg-white/30" onClick={() => setLightboxUrl(null)}>
+                        <X size={24} />
+                    </button>
+                </div>
+            )}
+
+            {/* ===== Modal: Registrar Pago a Cuidador (Liquidación) ===== */}
+            {selectedPayoutForPay && (
+                <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-300">
+                    <GlassCard className="w-full max-w-md rounded-[40px] shadow-2xl relative overflow-hidden animate-in zoom-in duration-300 border-t-8 border-t-primary">
+                        <div className="p-8 pb-4 flex justify-between items-center border-b border-outline-variant/20 bg-surface-container-low/50">
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 rounded-2xl bg-primary/10 text-primary">
+                                    <Banknote size={24} />
+                                </div>
+                                <div>
+                                    <h2 className="font-display-lg text-xl font-bold text-dark">Registrar Transferencia</h2>
+                                    <p className="text-xs text-on-surface-variant font-medium uppercase tracking-widest">Liquidación al cuidador</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => { setSelectedPayoutForPay(null); setPayoutReferenceInput(''); setPayoutNotesInput(''); }}
+                                className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="p-8 space-y-5">
+                            <div className="bg-primary/5 rounded-2xl p-4 border border-primary/20 flex justify-between items-center">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-outline mb-1">Cuidador</p>
+                                    <p className="font-bold text-on-surface">{selectedPayoutForPay.sitterName}</p>
+                                    <p className="text-xs text-on-surface-variant">{selectedPayoutForPay.sitterEmail}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-xs font-bold uppercase tracking-wider text-outline mb-1">Monto</p>
+                                    <p className="font-bold text-2xl text-primary">Bs. {parseFloat(selectedPayoutForPay.amount || 0).toFixed(2)}</p>
+                                    <p className="text-[10px] text-on-surface-variant">90% del total</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-outline uppercase tracking-wider mb-2">
+                                    Código / N° de Referencia *
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={payoutReferenceInput}
+                                    onChange={e => setPayoutReferenceInput(e.target.value)}
+                                    placeholder="Ej: TRX-20240612-0034 o N° de comprobante..."
+                                    className="w-full p-4 rounded-xl border border-outline-variant bg-surface-container-low outline-none focus:ring-2 focus:ring-primary transition font-medium"
+                                />
+                                <p className="text-[10px] text-on-surface-variant mt-1">Ingresa el número de comprobante o referencia de la transferencia bancaria.</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-outline uppercase tracking-wider mb-2">
+                                    Notas adicionales (opcional)
+                                </label>
+                                <textarea
+                                    rows={2}
+                                    value={payoutNotesInput}
+                                    onChange={e => setPayoutNotesInput(e.target.value)}
+                                    placeholder="Ej: Transferido vía BNB el 12/06/2026..."
+                                    className="w-full p-4 rounded-xl border border-outline-variant bg-surface-container-low outline-none focus:ring-2 focus:ring-primary transition resize-none"
+                                />
+                            </div>
+
+                            <div className="flex gap-4 pt-2">
+                                <button
+                                    onClick={() => { setSelectedPayoutForPay(null); setPayoutReferenceInput(''); setPayoutNotesInput(''); }}
+                                    disabled={isMarkingPaid}
+                                    className="flex-1 py-4 rounded-full font-bold bg-surface-container text-on-surface-variant hover:bg-surface-container-highest transition disabled:opacity-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleMarkPayoutPaid}
+                                    disabled={isMarkingPaid || !payoutReferenceInput.trim()}
+                                    className="flex-[2] bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-full font-bold shadow-xl hover:from-green-600 hover:to-emerald-700 transition active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {isMarkingPaid ? (
+                                        <span className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
+                                    ) : (
+                                        <><Check size={18} /> Confirmar Liquidación</>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </GlassCard>
+                </div>
+            )}
 
             {/* Modal de Gestión de Usuarios */}
             {isModalOpen && (
