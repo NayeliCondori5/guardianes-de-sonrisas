@@ -263,6 +263,14 @@ router.put('/sitters/:id/verify-identity', authenticateToken, async (req, res) =
                     selfie_url = NULL 
                 WHERE user_id = $5
             `, [identityStatus, isVerifiedVal, req.user.id, new Date().toISOString(), req.params.id]);
+
+            // Si se aprueba, marcar también la tabla users
+            if (approve) {
+                await client.query(
+                    'UPDATE users SET identity_verified = 1, identity_verified_at = $1, updated_at = $1 WHERE id = $2',
+                    [new Date().toISOString(), req.params.id]
+                );
+            }
         });
         
         // Eliminar archivos físicamente de Cloudinary/local de forma segura

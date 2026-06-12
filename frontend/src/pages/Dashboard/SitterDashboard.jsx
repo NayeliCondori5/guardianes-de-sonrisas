@@ -368,12 +368,12 @@ const SitterDashboard = () => {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             if (response.data && response.data.success) {
-                setIdentityStatus('verified');
+                setIdentityStatus('pending_review');
                 setIdentityConfidence(response.data.confidence);
                 setModal({
                     isOpen: true,
-                    title: "¡Identidad Verificada!",
-                    message: `Verificación biométrica exitosa. Coincidencia de rostros del ${(response.data.confidence * 100).toFixed(1)}%. Tu cuenta ahora cuenta con el distintivo de identidad verificada.`,
+                    title: "¡Verificación Biométrica Exitosa!",
+                    message: `Coincidencia facial del ${(response.data.confidence * 100).toFixed(1)}%. Tus documentos han sido enviados al administrador para revisión final. Recibirás confirmación pronto.`,
                     type: 'success'
                 });
             }
@@ -1134,8 +1134,9 @@ const SitterDashboard = () => {
                                 <div className="flex-1 text-center md:text-left">
                                     <h3 className="font-bold text-lg mb-1">Tu Nivel de Confianza: 
                                         <span className="text-primary ml-1.5 font-extrabold uppercase">
-                                            {identityStatus === 'verified' && emailVerified ? 'Máximo (Seguro)' : 
-                                             identityStatus === 'verified' || emailVerified ? 'Intermedio' : 'Básico'}
+                                            {(identityStatus === 'verified' || identityStatus === 'approved') && emailVerified ? 'Máximo (Seguro)' : 
+                                             (identityStatus === 'verified' || identityStatus === 'approved') || emailVerified ? 'Intermedio' :
+                                             identityStatus === 'pending_review' ? 'En Proceso' : 'Básico'}
                                         </span>
                                     </h3>
                                     <p className="text-sm text-on-surface-variant leading-relaxed">
@@ -1152,12 +1153,14 @@ const SitterDashboard = () => {
                                                 <ShieldCheck className="text-primary" /> Identidad Oficial
                                             </h3>
                                             <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                                                identityStatus === 'verified' ? 'bg-green-100 text-green-700' :
+                                                identityStatus === 'verified' || identityStatus === 'approved' ? 'bg-green-100 text-green-700' :
+                                                identityStatus === 'pending_review' ? 'bg-blue-100 text-blue-700' :
                                                 identityStatus === 'pending' ? 'bg-amber-100 text-amber-700' :
                                                 identityStatus === 'rejected' ? 'bg-red-100 text-red-700' :
                                                 'bg-surface-container text-on-surface-variant'
                                             }`}>
-                                                {identityStatus === 'verified' ? 'Verificado' :
+                                                {identityStatus === 'verified' || identityStatus === 'approved' ? 'Verificado' :
+                                                 identityStatus === 'pending_review' ? 'En Revisión' :
                                                  identityStatus === 'pending' ? 'Pendiente' :
                                                  identityStatus === 'rejected' ? 'Rechazado' :
                                                  'Sin Iniciar'}
@@ -1167,15 +1170,27 @@ const SitterDashboard = () => {
                                             Sube una foto de tu documento oficial (Cédula de Identidad, DNI o Pasaporte) y una selfie clara con buena iluminación. La verificación se procesará de forma automática mediante comparación facial biométrica.
                                         </p>
 
-                                        {identityStatus === 'verified' && (
+                                        {(identityStatus === 'verified' || identityStatus === 'approved') && (
                                             <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded-2xl text-sm space-y-2 mb-6">
                                                 <div className="flex gap-2">
                                                     <Check size={16} className="shrink-0 text-green-600 mt-0.5" />
-                                                    <span className="font-semibold">¡Identidad oficial verificada biométricamente!</span>
+                                                    <span className="font-semibold">¡Identidad oficial verificada y aprobada por el administrador!</span>
                                                 </div>
                                                 <p className="text-xs text-green-700 ml-6">
                                                     Las fotos de tus documentos se han eliminado permanentemente de nuestros servidores para proteger tu privacidad.
                                                 </p>
+                                            </div>
+                                        )}
+
+                                        {identityStatus === 'pending_review' && (
+                                            <div className="p-4 bg-blue-50 border border-blue-200 text-blue-800 rounded-2xl text-sm flex gap-2 mb-6">
+                                                <AlertTriangle size={16} className="shrink-0 text-blue-600 mt-0.5" />
+                                                <div>
+                                                    <p className="font-bold mb-1">Documentos enviados — Esperando revisión del administrador</p>
+                                                    <p className="text-xs text-blue-700">
+                                                        La verificación biométrica fue exitosa. Un administrador revisará tus fotos y aprobará tu identidad. No necesitas hacer nada más por ahora.
+                                                    </p>
+                                                </div>
                                             </div>
                                         )}
 
@@ -1197,7 +1212,7 @@ const SitterDashboard = () => {
                                             </div>
                                         )}
 
-                                        {(identityStatus === 'none' || identityStatus === 'rejected' || identityStatus === 'pending') && (
+                                        {(identityStatus === 'none' || identityStatus === 'rejected') && (
                                             <form onSubmit={handleIdentityUpload} className="space-y-4">
                                                 <div>
                                                     <label className="block text-xs font-bold mb-2 uppercase text-outline">1. Foto del Documento de Identidad (DNI/Cédula/Pasaporte)</label>

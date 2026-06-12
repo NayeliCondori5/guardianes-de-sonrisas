@@ -21,6 +21,11 @@ if (!fs.existsSync(tempUploadsDir)) {
     fs.mkdirSync(tempUploadsDir, { recursive: true });
 }
 
+const permanentVerifyDir = './uploads/identity-verification';
+if (!fs.existsSync(permanentVerifyDir)) {
+    fs.mkdirSync(permanentVerifyDir, { recursive: true });
+}
+
 const tempDiskStorage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, tempUploadsDir);
@@ -336,17 +341,26 @@ router.post('/verify-identity/upload', authenticateToken, (req, res) => {
             }
 
             if (result.isMatch) {
-                // Marcar como verificado en la tabla de usuarios
-                await db.query(
-                    'UPDATE users SET identity_verified = 1, identity_verified_at = $1, updated_at = $1 WHERE id = $2',
-                    [new Date().toISOString(), req.user.id]
-                );
+                // Mover fotos a almacenamiento permanente para revisión del admin
+                const permanentDocName = `doc-${req.user.id}-${Date.now()}${path.extname(documentFile.originalname || '.jpg')}`;
+                const permanentSelfieName = `selfie-${req.user.id}-${Date.now()}${path.extname(selfieFile.originalname || '.jpg')}`;
+                const permanentDocPath = path.join(permanentVerifyDir, permanentDocName);
+                const permanentSelfiePath = path.join(permanentVerifyDir, permanentSelfieName);
 
-                // Si es sitter, también actualizamos su campo identity_status a 'verified'
+                fs.copyFileSync(docPath, permanentDocPath);
+                fs.copyFileSync(selfiePath, permanentSelfiePath);
+
+                // Construir URLs accesibles
+                const host = req.get('host');
+                const protocol = req.protocol;
+                const documentUrl = `${protocol}://${host}/uploads/identity-verification/${permanentDocName}`;
+                const selfieUrl = `${protocol}://${host}/uploads/identity-verification/${permanentSelfieName}`;
+
+                // Si es sitter, guardar fotos y poner en 'pending_review' para que el admin las revise
                 if (req.user.role === 'sitter') {
                     await db.query(
-                        "UPDATE sitters SET identity_status = 'verified' WHERE user_id = $1",
-                        [req.user.id]
+                        "UPDATE sitters SET identity_status = 'pending_review', document_url = $1, selfie_url = $2 WHERE user_id = $3",
+                        [documentUrl, selfieUrl, req.user.id]
                     );
                 }
 
@@ -358,10 +372,10 @@ router.post('/verify-identity/upload', authenticateToken, (req, res) => {
 
                 res.json({
                     success: true,
-                    message: 'Identidad verificada exitosamente con biometría facial.',
+                    message: 'Verificación biométrica superada. Tu identidad está siendo revisada por un administrador. Recibirás confirmación pronto.',
                     confidence: result.confidence,
                     isMatch: true,
-                    status: 'approved'
+                    status: 'pending_review'
                 });
             } else {
                 // Registrar en verification_log
@@ -382,15 +396,13 @@ router.post('/verify-identity/upload', authenticateToken, (req, res) => {
             console.error("Error al procesar verificación facial:", procErr);
             res.status(500).json({ success: false, message: `Error al procesar verificación: ${procErr.message}` });
         } finally {
-            // ELIMINACIÓN SEGURA: eliminar imágenes del disco al terminar
+            // Eliminar archivos temporales (las copias permanentes ya se guardaron si fue exitoso)
             try {
                 if (fs.existsSync(docPath)) {
                     fs.unlinkSync(docPath);
-                    console.log(`[IDENTITY] Documento eliminado temporalmente de: ${docPath}`);
                 }
                 if (fs.existsSync(selfiePath)) {
                     fs.unlinkSync(selfiePath);
-                    console.log(`[IDENTITY] Selfie eliminada temporalmente de: ${selfiePath}`);
                 }
             } catch (cleanupErr) {
                 console.error("Error al limpiar archivos temporales de verificación:", cleanupErr);
