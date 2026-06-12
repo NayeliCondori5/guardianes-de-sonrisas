@@ -320,7 +320,22 @@ router.post('/verify-identity/upload', authenticateToken, (req, res) => {
             const ipAddress = req.ip || req.connection.remoteAddress;
             const logId = uuidv4();
 
-            if (result.isMatch && result.confidence >= 0.85) {
+            // Si el motor de verificación falló (no detectó rostros o no pudo inicializarse)
+            if (!result.success) {
+                await db.query(`
+                    INSERT INTO verification_log (id, user_id, type, method, confidence_score, status, ip_address, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                `, [logId, req.user.id, 'identity', 'face-api-local', 0, 'rejected', ipAddress, new Date().toISOString()]);
+
+                return res.status(400).json({
+                    success: false,
+                    message: result.error || 'No se pudo procesar la verificación facial. Por favor usa fotos claras y bien iluminadas.',
+                    isMatch: false,
+                    status: 'rejected'
+                });
+            }
+
+            if (result.isMatch) {
                 // Marcar como verificado en la tabla de usuarios
                 await db.query(
                     'UPDATE users SET identity_verified = 1, identity_verified_at = $1, updated_at = $1 WHERE id = $2',
@@ -339,7 +354,7 @@ router.post('/verify-identity/upload', authenticateToken, (req, res) => {
                 await db.query(`
                     INSERT INTO verification_log (id, user_id, type, method, confidence_score, status, ip_address, created_at)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                `, [logId, req.user.id, 'identity', result.mock ? 'mock' : 'azure_face', result.confidence, 'approved', ipAddress, new Date().toISOString()]);
+                `, [logId, req.user.id, 'identity', 'face-api-local', result.confidence, 'approved', ipAddress, new Date().toISOString()]);
 
                 res.json({
                     success: true,
@@ -353,11 +368,11 @@ router.post('/verify-identity/upload', authenticateToken, (req, res) => {
                 await db.query(`
                     INSERT INTO verification_log (id, user_id, type, method, confidence_score, status, ip_address, created_at)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                `, [logId, req.user.id, 'identity', result.mock ? 'mock' : 'azure_face', result.confidence, 'rejected', ipAddress, new Date().toISOString()]);
+                `, [logId, req.user.id, 'identity', 'face-api-local', result.confidence, 'rejected', ipAddress, new Date().toISOString()]);
 
                 res.status(400).json({
                     success: false,
-                    message: `La verificación facial falló. Coincidencia de rostros insuficiente (${(result.confidence * 100).toFixed(1)}%). Requerido >= 85%.`,
+                    message: `La verificación facial falló. Las fotos no corresponden a la misma persona (similitud: ${(result.confidence * 100).toFixed(1)}%). Por favor usa tu foto de carnet y una selfie tuya clara.`,
                     confidence: result.confidence,
                     isMatch: false,
                     status: 'rejected'
@@ -450,103 +465,6 @@ router.post('/verify-email/confirm', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Error interno.' });
-    }
-});
-
-// POST /api/users/verify-identity/upload -> verificación biométrica de identidad
-router.post('/verify-identity/upload', authenticateToken, tempUpload.fields([
-    { name: 'document', maxCount: 1 },
-    { name: 'selfie', maxCount: 1 }
-]), async (req, res) => {
-    const docFile = req.files?.document?.[0];
-    const selfieFile = req.files?.selfie?.[0];
-
-    const safeDelete = (filePath) => {
-        try {
-            if (filePath && fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
-        } catch (e) {
-            console.warn('[VERIFY] No se pudo eliminar archivo temporal:', e.message);
-        }
-    };
-
-    if (!docFile || !selfieFile) {
-        safeDelete(docFile?.path);
-        safeDelete(selfieFile?.path);
-        return res.status(400).json({
-            success: false,
-            message: 'Se requieren dos imágenes: la foto del documento oficial y una selfie.'
-        });
-    }
-
-    try {
-        console.log(`[VERIFY] Usuario ${req.user.id} solicitó verificación de identidad.`);
-        console.log(`[VERIFY] Documento: ${docFile.path} | Selfie: ${selfieFile.path}`);
-
-        // Comparar rostros con face-api.js local
-        const result = await faceVerificationService.compareFaces(docFile.path, selfieFile.path);
-
-        const isVerified = result.isMatch && result.confidence >= 0.70;
-        const logId = uuidv4();
-        const now = new Date().toISOString();
-
-        // Registrar en verification_log
-        await db.query(
-            `INSERT INTO verification_log (id, user_id, type, confidence_score, is_match, verified_at, provider)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [logId, req.user.id, 'face_id', result.confidence, isVerified ? 1 : 0, now, 'face-api-local']
-        );
-
-        if (isVerified) {
-            // Actualizar columnas de identidad en la tabla users
-            await db.query(
-                'UPDATE users SET identity_verified = 1, identity_verified_at = $1, updated_at = $2 WHERE id = $3',
-                [now, now, req.user.id]
-            );
-
-            // Si el usuario es sitter, actualizar identity_status también
-            if (req.user.role === 'sitter') {
-                await db.query(
-                    "UPDATE sitters SET identity_status = 'verified', updated_at = $1 WHERE user_id = $2",
-                    [now, req.user.id]
-                );
-            }
-
-            console.log(`[VERIFY] ✅ Identidad verificada para usuario ${req.user.id}. Confianza: ${(result.confidence * 100).toFixed(1)}%`);
-        } else {
-            console.log(`[VERIFY] ❌ Verificación fallida para usuario ${req.user.id}. Confianza: ${(result.confidence * 100).toFixed(1)}% (umbral: 70%)`);
-        }
-
-        // Eliminar archivos temporales del disco (privacidad)
-        safeDelete(docFile.path);
-        safeDelete(selfieFile.path);
-
-        if (!isVerified) {
-            return res.status(400).json({
-                success: false,
-                message: `Las imágenes no coinciden suficientemente (confianza: ${(result.confidence * 100).toFixed(1)}%). Por favor usa fotos claras y bien iluminadas donde tu rostro sea visible.`,
-                confidence: result.confidence
-            });
-        }
-
-        return res.json({
-            success: true,
-            message: '¡Identidad verificada exitosamente!',
-            confidence: result.confidence,
-            verified_at: now
-        });
-
-    } catch (err) {
-        // Limpiar archivos en caso de error
-        safeDelete(docFile?.path);
-        safeDelete(selfieFile?.path);
-
-        console.error('[VERIFY ERROR]:', err.message);
-        return res.status(500).json({
-            success: false,
-            message: err.message || 'Error durante la verificación facial. Por favor intenta con imágenes más claras.'
-        });
     }
 });
 

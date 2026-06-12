@@ -1,134 +1,112 @@
 /**
- * Face Verification Service
- * 
- * Usa Hugging Face Inference API cuando está configurada la key real.
- * En cualquier otro caso (sin key, key de prueba, error de red), usa modo MOCK
- * que aprueba automáticamente la verificación con 92.5% de confianza.
+ * Face Verification Service — Verificación facial REAL con face-api.js local
  *
- * Para activar verificación REAL (opcional):
- *   1. Regístrate gratis en https://huggingface.co
- *   2. Ve a https://huggingface.co/settings/tokens -> New token (Read)
- *   3. Añade HUGGINGFACE_API_KEY=hf_tu_token_real en el .env
- *   4. En Render: Environment Variables -> HUGGINGFACE_API_KEY
+ * Usa modelos pre-entrenados de reconocimiento facial corridos localmente
+ * en el backend con @vladmandic/face-api + canvas.
+ *
+ * NO aprueba automáticamente. Si no detecta un rostro en alguna imagen,
+ * devuelve un fallo claro. Solo aprueba cuando la distancia euclidiana
+ * entre descriptores faciales es suficientemente baja (umbral configurable).
+ *
+ * Modelos requeridos en ./models/:
+ *   - ssd_mobilenetv1/
+ *   - face_landmark_68/
+ *   - face_recognition_model/
  */
+
 const fs = require('fs');
-const https = require('https');
+const path = require('path');
 
-const HF_MODEL = 'facebook/dino-vits16';
+// Directorio donde están los modelos en el paquete npm instalado
+const MODELS_DIR = path.join(__dirname, '../../node_modules/@vladmandic/face-api/model');
 
-/**
- * Verifica si la API key es real (no placeholder ni vacía)
- */
-function isRealApiKey(key) {
-    if (!key) return false;
-    if (key.startsWith('hf_xxx')) return false;      // placeholder genérico
-    if (key === 'hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx') return false;
-    if (key.length < 20) return false;
-    return key.startsWith('hf_');
-}
+// Umbral de distancia euclidiana para considerar que dos rostros son la misma persona.
+// face-api.js usa distancia euclidiana: el valor estándar recomendado es 0.6.
+const MATCH_THRESHOLD = 0.6;
 
-/**
- * Modo mock: simula una verificación exitosa sin llamar a ninguna API.
- * Útil para desarrollo y cuando no hay credenciales configuradas.
- */
-function mockVerification(docPath, selfiePath, reason) {
-    console.log('\n======================================================');
-    console.log(`[MOCK FACE VERIFICATION] Razón: ${reason}`);
-    console.log(`  Documento: ${docPath}`);
-    console.log(`  Selfie:    ${selfiePath}`);
-    console.log(`  Resultado: Coincidencia simulada exitosa (92.5%)`);
-    console.log('  Para activar verificación real obtén tu token en:');
-    console.log('  https://huggingface.co/settings/tokens');
-    console.log('======================================================\n');
-
-    return {
-        success: true,
-        isMatch: true,
-        confidence: 0.925,
-        mock: true
-    };
-}
+// Cache de inicialización de modelos (solo se cargan una vez)
+let faceapi = null;
+let canvas = null;
+let modelsLoaded = false;
+let initError = null;
 
 /**
- * Convierte imagen a base64
+ * Inicializa face-api.js con TensorFlow y canvas, cargando los modelos locales.
+ * Solo se ejecuta una vez; subsecuentes llamadas usan el cache.
  */
-function imageToBase64(imagePath) {
-    const buffer = fs.readFileSync(imagePath);
-    return buffer.toString('base64');
-}
+async function initFaceApi() {
+    if (modelsLoaded) return true;
+    if (initError) return false;
 
-/**
- * Llama a Hugging Face Feature Extraction API
- */
-async function getImageEmbedding(apiKey, imagePath) {
-    return new Promise((resolve, reject) => {
-        const base64 = imageToBase64(imagePath);
-        const payload = JSON.stringify({ inputs: base64 });
+    try {
+        // Verificar que los modelos existen localmente
+        const requiredManifests = [
+            'ssd_mobilenetv1_model-weights_manifest.json',
+            'face_landmark_68_model-weights_manifest.json',
+            'face_recognition_model-weights_manifest.json'
+        ];
+        for (const manifest of requiredManifests) {
+            const filePath = path.join(MODELS_DIR, manifest);
+            if (!fs.existsSync(filePath)) {
+                throw new Error(`Archivo de modelo no encontrado: ${filePath}`);
+            }
+        }
 
-        const options = {
-            hostname: 'api-inference.huggingface.co',
-            path: `/models/${HF_MODEL}`,
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(payload)
-            },
-            timeout: 15000  // 15 segundos máximo
-        };
+        // Usar el bundle node-wasm de face-api que incluye su propio backend
+        // sin necesidad de bindings nativos de TensorFlow
+        const faceApiPath = path.join(__dirname, '../../node_modules/@vladmandic/face-api/dist/face-api.node-wasm.js');
+        faceapi = require(faceApiPath);
+        canvas = require('canvas');
 
-        const req = https.request(options, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    const parsed = JSON.parse(data);
-                    if (parsed.error) {
-                        reject(new Error(`HuggingFace error: ${parsed.error}`));
-                    } else {
-                        const embedding = Array.isArray(parsed[0]) ? parsed[0] : parsed;
-                        resolve(embedding);
-                    }
-                } catch (e) {
-                    reject(new Error('Respuesta inválida de HuggingFace'));
-                }
-            });
-        });
+        // Patch del entorno para Node.js (reemplaza APIs de browser)
+        const { Canvas, Image, ImageData } = canvas;
+        faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
 
-        req.on('error', reject);
-        req.on('timeout', () => {
-            req.destroy();
-            reject(new Error('Timeout al conectar con HuggingFace'));
-        });
-        req.write(payload);
-        req.end();
-    });
-}
+        // Inicializar el backend WASM
+        await faceapi.tf.setBackend('wasm');
+        await faceapi.tf.ready();
 
-/**
- * Calcula similitud coseno entre dos vectores
- */
-function cosineSimilarity(a, b) {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
-        throw new Error('Embeddings incompatibles');
+        // Cargar los tres modelos necesarios desde el directorio de modelos
+        console.log('[FACE-API] Cargando modelos locales (WASM backend)...');
+        await faceapi.nets.ssdMobilenetv1.loadFromDisk(MODELS_DIR);
+        await faceapi.nets.faceLandmark68Net.loadFromDisk(MODELS_DIR);
+        await faceapi.nets.faceRecognitionNet.loadFromDisk(MODELS_DIR);
+
+        modelsLoaded = true;
+        console.log('[FACE-API] ✅ Modelos cargados correctamente.');
+        return true;
+    } catch (err) {
+        initError = err.message;
+        console.error('[FACE-API] ❌ Error al inicializar modelos:', err.message);
+        return false;
     }
-    let dot = 0, normA = 0, normB = 0;
-    for (let i = 0; i < a.length; i++) {
-        dot += a[i] * b[i];
-        normA += a[i] * a[i];
-        normB += b[i] * b[i];
-    }
-    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+/**
+ * Extrae el descriptor facial (embedding de 128 dimensiones) de una imagen.
+ * @param {string} imagePath — Ruta local al archivo de imagen
+ * @returns {Float32Array|null} — Descriptor facial, o null si no se detectó rostro
+ */
+async function getFaceDescriptor(imagePath) {
+    const img = await canvas.loadImage(imagePath);
+    const detection = await faceapi
+        .detectSingleFace(img)
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+    if (!detection) return null;
+    return detection.descriptor;
 }
 
 /**
  * Compara dos imágenes faciales y devuelve el resultado de la verificación.
- * @param {string} docPath    - Ruta a la foto del documento oficial
- * @param {string} selfiePath - Ruta a la selfie del usuario
- * @returns {Promise<{ success: boolean, isMatch: boolean, confidence: number, mock?: boolean }>}
+ * 
+ * @param {string} docPath    — Ruta a la foto del documento oficial (carnet/pasaporte)
+ * @param {string} selfiePath — Ruta a la selfie del usuario
+ * @returns {Promise<{ success: boolean, isMatch: boolean, confidence: number, error?: string }>}
  */
 async function compareFaces(docPath, selfiePath) {
-    // Verificar que los archivos existen
+    // Verificar existencia de archivos
     if (!fs.existsSync(docPath)) {
         throw new Error('No se encontró el archivo del documento de identidad.');
     }
@@ -136,49 +114,79 @@ async function compareFaces(docPath, selfiePath) {
         throw new Error('No se encontró el archivo de la selfie.');
     }
 
-    const apiKey = process.env.HUGGINGFACE_API_KEY;
+    // Intentar inicializar face-api.js
+    const initialized = await initFaceApi();
 
-    // Si no hay key real, usar mock directamente
-    if (!isRealApiKey(apiKey)) {
-        return mockVerification(docPath, selfiePath, 'No hay HUGGINGFACE_API_KEY real configurada');
+    if (!initialized) {
+        // Si los modelos no están disponibles, NO aprobamos automáticamente.
+        // Retornamos un error indicando que la verificación no pudo realizarse.
+        console.error('[FACE-API] No se pudo inicializar el motor de verificación facial.');
+        return {
+            success: false,
+            isMatch: false,
+            confidence: 0,
+            error: `Motor de verificación facial no disponible: ${initError || 'error desconocido'}`
+        };
     }
 
     try {
-        console.log('[HF-FACE] Extrayendo embedding del documento oficial...');
-        const embedding1 = await getImageEmbedding(apiKey, docPath);
+        console.log('[FACE-API] Extrayendo descriptor facial del documento...');
+        const descriptor1 = await getFaceDescriptor(docPath);
 
-        console.log('[HF-FACE] Extrayendo embedding de la selfie...');
-        const embedding2 = await getImageEmbedding(apiKey, selfiePath);
+        if (!descriptor1) {
+            console.warn('[FACE-API] ⚠️ No se detectó ningún rostro en el documento oficial.');
+            return {
+                success: false,
+                isMatch: false,
+                confidence: 0,
+                error: 'No se detectó ningún rostro en la foto del documento. Por favor usa una imagen clara del documento con tu rostro visible.'
+            };
+        }
 
-        const similarity = cosineSimilarity(embedding1, embedding2);
-        const confidence = Math.max(0, Math.min(1, (similarity + 1) / 2));
-        const isMatch = similarity > 0.75;
+        console.log('[FACE-API] Extrayendo descriptor facial de la selfie...');
+        const descriptor2 = await getFaceDescriptor(selfiePath);
 
-        console.log(`[HF-FACE] Similitud: ${similarity.toFixed(4)} | Confianza: ${(confidence * 100).toFixed(1)}% | Coincidencia: ${isMatch}`);
+        if (!descriptor2) {
+            console.warn('[FACE-API] ⚠️ No se detectó ningún rostro en la selfie.');
+            return {
+                success: false,
+                isMatch: false,
+                confidence: 0,
+                error: 'No se detectó ningún rostro en la selfie. Por favor toma una foto clara de tu rostro de frente.'
+            };
+        }
+
+        // Calcular distancia euclidiana entre los dos descriptores faciales
+        const distance = faceapi.euclideanDistance(descriptor1, descriptor2);
+
+        // Convertir distancia a confianza (0 = idéntico, ~1+ = muy diferente)
+        // Confianza: cuanto menor distancia, mayor confianza
+        const confidence = Math.max(0, Math.min(1, 1 - distance));
+        const isMatch = distance < MATCH_THRESHOLD;
+
+        console.log(`[FACE-API] Distancia: ${distance.toFixed(4)} | Confianza: ${(confidence * 100).toFixed(1)}% | Umbral: ${MATCH_THRESHOLD} | Coincidencia: ${isMatch ? '✅' : '❌'}`);
 
         return {
             success: true,
             isMatch,
-            confidence: parseFloat(confidence.toFixed(4))
+            confidence: parseFloat(confidence.toFixed(4)),
+            distance: parseFloat(distance.toFixed(4))
         };
 
     } catch (error) {
-        // Si hay error de red (ENOTFOUND, timeout, etc.), caer en modo mock
-        // en lugar de mostrar un error al usuario
-        const isNetworkError = error.code === 'ENOTFOUND' 
-            || error.code === 'ECONNREFUSED' 
-            || error.code === 'ETIMEDOUT'
-            || error.message.includes('Timeout')
-            || error.message.includes('network');
+        console.error('[FACE-API ERROR]:', error.message);
 
-        if (isNetworkError) {
-            console.warn('[HF-FACE] Error de red, usando modo mock como fallback:', error.message);
-            return mockVerification(docPath, selfiePath, `Error de red: ${error.message}`);
-        }
-
-        console.error('[HF-FACE ERROR]:', error.message);
-        throw new Error('Error en la verificación facial. Por favor intenta con imágenes más claras.');
+        // No aprobamos en caso de error inesperado
+        return {
+            success: false,
+            isMatch: false,
+            confidence: 0,
+            error: 'Error inesperado durante la verificación facial. Por favor intenta con imágenes más claras y bien iluminadas.'
+        };
     }
 }
+
+// Pre-cargar modelos al iniciar el módulo (en segundo plano)
+initFaceApi().catch(() => {});
 
 module.exports = { compareFaces };
